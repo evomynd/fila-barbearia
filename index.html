@@ -129,6 +129,11 @@
       saveAvailabilityBtn: document.getElementById('save-availability-btn')
     };
 
+      // Elementos do modal de fila admin
+      els.adminQueueModal = document.getElementById('admin-queue-modal');
+      els.closeAdminQueueModal = document.getElementById('close-admin-queue-modal');
+      els.adminQueueList = document.getElementById('admin-queue-list');
+
     function showLoading() { els.loading.style.display = 'flex'; els.login.classList.add('hidden'); els.app.classList.add('hidden'); }
     function showLogin() { els.loading.style.display = 'none'; els.login.classList.remove('hidden'); els.app.classList.add('hidden'); }
     function showApp() { els.loading.style.display = 'none'; els.login.classList.add('hidden'); els.app.classList.remove('hidden'); }
@@ -242,6 +247,17 @@
     els.menuCloseBtn?.addEventListener('click', closeMenu);
     els.menuOverlay?.addEventListener('click', closeMenu);
 
+      // Botão para abrir modal de fila admin
+      const adminQueueBtn = document.createElement('button');
+      adminQueueBtn.id = 'menu-queue-btn';
+      adminQueueBtn.className = 'w-full p-3 border rounded-lg text-left hover:bg-gray-50';
+      adminQueueBtn.textContent = '👥 Fila de clientes';
+      adminQueueBtn.addEventListener('click', () => {
+        closeMenu();
+        showAdminQueueModal();
+      });
+      document.getElementById('menu-drawer').querySelector('.space-y-2').appendChild(adminQueueBtn);
+
     els.adminBtn?.addEventListener('click', () => { closeMenu(); els.app.classList.add('hidden'); els.adminPage.classList.remove('hidden'); loadAdminBarbers(); });
     els.backFromAdmin?.addEventListener('click', () => { els.adminPage.classList.add('hidden'); els.app.classList.remove('hidden'); });
 
@@ -307,6 +323,50 @@
         alert('Erro ao salvar disponibilidade.');
       }
     });
+
+      // Função para mostrar modal de fila admin
+      async function showAdminQueueModal() {
+        els.adminQueueModal.classList.add('show');
+        els.adminQueueList.innerHTML = '<div class="text-center text-gray-500">Carregando fila...</div>';
+        // Busca todos os clientes na fila, ordenados por data/hora de inclusão
+        const today = getTodayInSaoPaulo();
+        const qRef = query(collection(db, 'queues'), where('date', '==', today), orderBy('createdAt'));
+        onSnapshot(qRef, (snap) => {
+          if (snap.empty) {
+            els.adminQueueList.innerHTML = '<div class="text-center text-gray-500">Nenhum cliente na fila.</div>';
+            return;
+          }
+          els.adminQueueList.innerHTML = '';
+          snap.forEach(docu => {
+            const d = docu.data();
+            const card = document.createElement('div');
+            card.className = 'card p-4 mb-3 flex items-center justify-between';
+            card.innerHTML = `
+              <div>
+                <div class="font-bold text-lg">${d.userName}</div>
+                <div class="text-sm text-gray-600">Barbeiro: ${d.barberId} | Horário: ${d.time}</div>
+              </div>
+              <button class="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg" data-checkin="${docu.id}">Check-in</button>
+            `;
+            els.adminQueueList.appendChild(card);
+          });
+          // Adiciona event listeners para check-in
+          els.adminQueueList.querySelectorAll('button[data-checkin]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const id = btn.getAttribute('data-checkin');
+              btn.disabled = true;
+              btn.textContent = 'Confirmando...';
+              const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+              await deleteDoc(doc(db, 'queues', id));
+            });
+          });
+        });
+      }
+
+      els.closeAdminQueueModal?.addEventListener('click', () => {
+        els.adminQueueModal.classList.remove('show');
+        els.adminQueueList.innerHTML = '';
+      });
 
     els.adminAddBarberBtn?.addEventListener('click', async () => {
       const name = els.adminBarberName.value.trim();
@@ -688,6 +748,17 @@
       </div>
     </div>
   </div>
+
+    <!-- Modal fila admin -->
+    <div id="admin-queue-modal" class="modal-overlay">
+      <div class="card rounded-2xl p-6 max-w-md w-full mx-4">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold" style="color:#151b29">Fila de clientes</h2>
+          <button id="close-admin-queue-modal" class="text-gray-600">✕</button>
+        </div>
+        <div id="admin-queue-list" class="space-y-2"></div>
+      </div>
+    </div>
 
   <div id="availability-modal" class="modal-overlay">
     <div class="card rounded-2xl p-6 max-w-md w-full mx-4">
