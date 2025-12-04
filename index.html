@@ -45,6 +45,33 @@
     let selectedBarber = null;
     let selectedDate = null;
     let selectedTime = null;
+    let editingBarberId = null;
+    let currentBarberAvailability = null;
+    let currentQueueId = null;
+    let queueListener = null;
+
+    function getTodayInSaoPaulo() {
+      const now = new Date();
+      const saoPauloTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+      return saoPauloTime.toISOString().split('T')[0];
+    }
+
+    function getTomorrowInSaoPaulo() {
+      const now = new Date();
+      const saoPauloTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+      saoPauloTime.setDate(saoPauloTime.getDate() + 1);
+      
+      // Se amanhã for domingo (0), pula para segunda (1)
+      if (saoPauloTime.getDay() === 0) {
+        saoPauloTime.setDate(saoPauloTime.getDate() + 1);
+      }
+      
+      return saoPauloTime.toISOString().split('T')[0];
+    }
+
+    function getAllowedDates() {
+      return [getTodayInSaoPaulo(), getTomorrowInSaoPaulo()];
+    }
 
     const els = {
       loading: document.getElementById('loading-screen'),
@@ -54,6 +81,22 @@
       showEmailBtn: document.getElementById('show-email-login'),
       emailModal: document.getElementById('email-login-modal'),
       closeEmailModal: document.getElementById('close-email-modal'),
+      emailLoginForm: document.getElementById('email-login-form'),
+      emailSignupForm: document.getElementById('email-signup-form'),
+      emailResetForm: document.getElementById('email-reset-form'),
+      showSignupLink: document.getElementById('show-signup'),
+      showLoginLink: document.getElementById('show-login'),
+      showResetLink: document.getElementById('show-reset'),
+      loginEmail: document.getElementById('login-email'),
+      loginPassword: document.getElementById('login-password'),
+      loginBtn: document.getElementById('login-btn'),
+      signupName: document.getElementById('signup-name'),
+      signupEmail: document.getElementById('signup-email'),
+      signupPassword: document.getElementById('signup-password'),
+      signupBtn: document.getElementById('signup-btn'),
+      resetEmail: document.getElementById('reset-email'),
+      resetBtn: document.getElementById('reset-btn'),
+      authError: document.getElementById('auth-error'),
       userName: document.getElementById('user-name'),
       userEmail: document.getElementById('user-email'),
       userPhoto: document.getElementById('user-photo'),
@@ -65,6 +108,7 @@
       otherDateBtn: document.getElementById('other-date-btn'),
       ringModal: document.getElementById('ring-modal'),
       ringNumber: document.getElementById('ring-number'),
+      leaveQueueBtn: document.getElementById('leave-queue-btn'),
       menuBtn: document.getElementById('menu-btn'),
       menuOverlay: document.getElementById('menu-overlay'),
       menuDrawer: document.getElementById('menu-drawer'),
@@ -74,7 +118,15 @@
       backFromAdmin: document.getElementById('back-from-admin'),
       adminBarberList: document.getElementById('admin-barber-list'),
       adminAddBarberBtn: document.getElementById('admin-add-barber-btn'),
-      adminBarberName: document.getElementById('admin-barber-name')
+      adminBarberName: document.getElementById('admin-barber-name'),
+      adminAvailabilityBtn: document.getElementById('admin-availability-btn'),
+      availabilityModal: document.getElementById('availability-modal'),
+      closeAvailabilityModal: document.getElementById('close-availability-modal'),
+      availBarberName: document.getElementById('avail-barber-name'),
+      availDays: document.getElementById('avail-days'),
+      availStartTime: document.getElementById('avail-start-time'),
+      availEndTime: document.getElementById('avail-end-time'),
+      saveAvailabilityBtn: document.getElementById('save-availability-btn')
     };
 
     function showLoading() { els.loading.style.display = 'flex'; els.login.classList.add('hidden'); els.app.classList.add('hidden'); }
@@ -85,8 +137,88 @@
       try { showLoading(); const res = await signInWithPopup(auth, provider); currentUser = res.user; await ensureUserDoc(currentUser); } catch(e){ console.error(e); showLogin(); }
     });
 
+    els.showEmailBtn?.addEventListener('click', () => {
+      els.emailModal.classList.add('show');
+      showEmailForm('login');
+    });
+
+    els.closeEmailModal?.addEventListener('click', () => els.emailModal.classList.remove('show'));
+
+    els.showSignupLink?.addEventListener('click', (e) => { e.preventDefault(); showEmailForm('signup'); });
+    els.showLoginLink?.addEventListener('click', (e) => { e.preventDefault(); showEmailForm('login'); });
+    els.showResetLink?.addEventListener('click', (e) => { e.preventDefault(); showEmailForm('reset'); });
+
+    function showEmailForm(type) {
+      els.emailLoginForm.classList.add('hidden');
+      els.emailSignupForm.classList.add('hidden');
+      els.emailResetForm.classList.add('hidden');
+      els.authError.textContent = '';
+      if (type === 'login') els.emailLoginForm.classList.remove('hidden');
+      else if (type === 'signup') els.emailSignupForm.classList.remove('hidden');
+      else if (type === 'reset') els.emailResetForm.classList.remove('hidden');
+    }
+
+    els.loginBtn?.addEventListener('click', async () => {
+      const email = els.loginEmail.value.trim();
+      const password = els.loginPassword.value;
+      if (!email || !password) { els.authError.textContent = 'Preencha todos os campos.'; return; }
+      try {
+        els.authError.textContent = '';
+        els.loginBtn.disabled = true;
+        els.loginBtn.textContent = 'Entrando...';
+        await signInWithEmailAndPassword(auth, email, password);
+        els.emailModal.classList.remove('show');
+      } catch(e) {
+        els.authError.textContent = e.code === 'auth/wrong-password' ? 'Senha incorreta.' : e.code === 'auth/user-not-found' ? 'Usuário não encontrado.' : 'Erro ao entrar.';
+      } finally {
+        els.loginBtn.disabled = false;
+        els.loginBtn.textContent = 'Entrar';
+      }
+    });
+
+    els.signupBtn?.addEventListener('click', async () => {
+      const name = els.signupName.value.trim();
+      const email = els.signupEmail.value.trim();
+      const password = els.signupPassword.value;
+      if (!name || !email || !password) { els.authError.textContent = 'Preencha todos os campos.'; return; }
+      if (password.length < 6) { els.authError.textContent = 'Senha deve ter no mínimo 6 caracteres.'; return; }
+      try {
+        els.authError.textContent = '';
+        els.signupBtn.disabled = true;
+        els.signupBtn.textContent = 'Criando...';
+        const res = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(res.user, { displayName: name });
+        await ensureUserDoc(res.user);
+        els.emailModal.classList.remove('show');
+      } catch(e) {
+        els.authError.textContent = e.code === 'auth/email-already-in-use' ? 'Email já cadastrado.' : e.code === 'auth/invalid-email' ? 'Email inválido.' : 'Erro ao criar conta.';
+      } finally {
+        els.signupBtn.disabled = false;
+        els.signupBtn.textContent = 'Criar Conta';
+      }
+    });
+
+    els.resetBtn?.addEventListener('click', async () => {
+      const email = els.resetEmail.value.trim();
+      if (!email) { els.authError.textContent = 'Digite seu email.'; return; }
+      try {
+        els.authError.textContent = '';
+        els.resetBtn.disabled = true;
+        els.resetBtn.textContent = 'Enviando...';
+        await sendPasswordResetEmail(auth, email);
+        els.authError.textContent = 'Email de recuperação enviado! Verifique sua caixa de entrada.';
+        els.authError.style.color = 'green';
+        setTimeout(() => { showEmailForm('login'); els.authError.style.color = ''; }, 3000);
+      } catch(e) {
+        els.authError.textContent = e.code === 'auth/user-not-found' ? 'Email não encontrado.' : 'Erro ao enviar email.';
+      } finally {
+        els.resetBtn.disabled = false;
+        els.resetBtn.textContent = 'Enviar Link';
+      }
+    });
+
     onAuthStateChanged(auth, async (user) => {
-      if (user) { currentUser = user; await ensureUserDoc(user); updateUserUI(user); showApp(); } else { showLogin(); }
+      if (user) { currentUser = user; await ensureUserDoc(user); updateUserUI(user); loadBarbers(); showApp(); } else { showLogin(); }
     });
 
     async function ensureUserDoc(user){
@@ -122,11 +254,59 @@
           const d = docu.data();
           const li = document.createElement('div');
           li.className = 'flex items-center justify-between p-3 border rounded-lg';
-          li.innerHTML = `<span class="font-semibold">${d.name}</span>`;
+          const availText = d.availability ? `${d.availability.days?.length || 0} dias` : 'Não configurado';
+          li.innerHTML = `
+            <div>
+              <span class="font-semibold">${d.name}</span>
+              <p class="text-xs text-gray-500">Disponibilidade: ${availText}</p>
+            </div>
+            <button class="text-blue-600 hover:text-blue-800 text-sm font-semibold" onclick="window.editBarberAvailability('${docu.id}', '${d.name}')">Editar</button>
+          `;
           els.adminBarberList.appendChild(li);
         });
       });
     }
+
+    window.editBarberAvailability = async (barberId, barberName) => {
+      editingBarberId = barberId;
+      els.availBarberName.textContent = barberName;
+      const barberDoc = await getDoc(doc(db, 'barbers', barberId));
+      const data = barberDoc.data();
+      const avail = data.availability || { days: [], startTime: '09:00', endTime: '18:00' };
+      
+      document.querySelectorAll('.day-checkbox').forEach(cb => {
+        cb.checked = avail.days?.includes(cb.value) || false;
+      });
+      els.availStartTime.value = avail.startTime || '09:00';
+      els.availEndTime.value = avail.endTime || '18:00';
+      
+      els.availabilityModal.classList.add('show');
+    };
+
+    els.closeAvailabilityModal?.addEventListener('click', () => els.availabilityModal.classList.remove('show'));
+
+    els.saveAvailabilityBtn?.addEventListener('click', async () => {
+      if (!editingBarberId) return;
+      const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value);
+      const startTime = els.availStartTime.value;
+      const endTime = els.availEndTime.value;
+      
+      if (selectedDays.length === 0) {
+        alert('Selecione pelo menos um dia.');
+        return;
+      }
+      
+      try {
+        await updateDoc(doc(db, 'barbers', editingBarberId), {
+          availability: { days: selectedDays, startTime, endTime }
+        });
+        els.availabilityModal.classList.remove('show');
+        editingBarberId = null;
+      } catch(e) {
+        console.error(e);
+        alert('Erro ao salvar disponibilidade.');
+      }
+    });
 
     els.adminAddBarberBtn?.addEventListener('click', async () => {
       const name = els.adminBarberName.value.trim();
@@ -134,6 +314,76 @@
       await addDoc(collection(db, 'barbers'), { name, createdAt: new Date().toISOString() });
       els.adminBarberName.value = '';
     });
+
+    async function loadBarbers(){
+      const barberContainer = document.querySelector('.grid.grid-cols-1.sm\\:grid-cols-3');
+      if (!barberContainer) return;
+      barberContainer.innerHTML = '<p class="col-span-3 text-center text-gray-600">Carregando barbeiros...</p>';
+      
+      const qRef = query(collection(db, 'barbers'), orderBy('name'));
+      onSnapshot(qRef, (snap) => {
+        barberContainer.innerHTML = '';
+        if (snap.empty) {
+          barberContainer.innerHTML = '<p class="col-span-3 text-center text-gray-600">Nenhum barbeiro cadastrado. Use o menu Admin.</p>';
+          return;
+        }
+        snap.forEach(docu => {
+          const d = docu.data();
+          const btn = document.createElement('button');
+          btn.className = 'barber-btn zele-btn rounded-lg py-6 text-lg font-bold';
+          btn.dataset.barberId = docu.id;
+          btn.textContent = d.name;
+          btn.addEventListener('click', async () => {
+            document.querySelectorAll('.barber-btn').forEach(b => b.classList.remove('ring-4'));
+            btn.classList.add('ring-4');
+            selectedBarber = docu.id;
+            currentBarberAvailability = d.availability || null;
+            validateAndUpdateDateInput();
+            updateQueuePreview();
+          });
+          barberContainer.appendChild(btn);
+        });
+      });
+    }
+
+    function validateAndUpdateDateInput() {
+      const allowedDates = getAllowedDates();
+      const today = allowedDates[0];
+      const tomorrow = allowedDates[1];
+      
+      els.dateInput.disabled = false;
+      els.dateInput.min = today;
+      els.dateInput.max = tomorrow;
+      
+      if (selectedDate) {
+        // Verifica se a data está dentro dos dias permitidos (hoje ou amanhã)
+        if (!allowedDates.includes(selectedDate)) {
+          els.queueInfo.textContent = 'Apenas hoje e amanhã são permitidos.';
+          els.joinQueueBtn.disabled = true;
+          selectedDate = null;
+          els.dateInput.value = '';
+          return;
+        }
+        
+        // Verifica disponibilidade do barbeiro
+        if (currentBarberAvailability && currentBarberAvailability.days && currentBarberAvailability.days.length > 0) {
+          const dayOfWeek = new Date(selectedDate + 'T00:00:00').getDay().toString();
+          if (!currentBarberAvailability.days.includes(dayOfWeek)) {
+            els.queueInfo.textContent = 'Este barbeiro não trabalha neste dia. Escolha outra data.';
+            els.joinQueueBtn.disabled = true;
+            selectedDate = null;
+            els.dateInput.value = '';
+          }
+        }
+      }
+    }
+
+    function validateTime() {
+      if (!currentBarberAvailability || !selectedTime) return true;
+      const start = currentBarberAvailability.startTime || '09:00';
+      const end = currentBarberAvailability.endTime || '18:00';
+      return selectedTime >= start && selectedTime <= end;
+    }
 
     els.barberBtns.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -144,11 +394,70 @@
       });
     });
 
-    els.dateInput?.addEventListener('change', (e) => { selectedDate = e.target.value; updateQueuePreview(); });
-    els.timeInput?.addEventListener('change', (e) => { selectedTime = e.target.value; updateQueuePreview(); });
+    els.dateInput?.addEventListener('change', (e) => { 
+      selectedDate = e.target.value; 
+      
+      const allowedDates = getAllowedDates();
+      if (!allowedDates.includes(selectedDate)) {
+        els.queueInfo.textContent = 'Apenas hoje e amanhã são permitidos.';
+        els.joinQueueBtn.disabled = true;
+        return;
+      }
+      
+      if (currentBarberAvailability && currentBarberAvailability.days) {
+        const dayOfWeek = new Date(selectedDate + 'T00:00:00').getDay().toString();
+        if (!currentBarberAvailability.days.includes(dayOfWeek)) {
+          els.queueInfo.textContent = 'Este barbeiro não trabalha neste dia. Escolha outra data.';
+          els.joinQueueBtn.disabled = true;
+          return;
+        }
+      }
+      updateQueuePreview(); 
+    });
+    
+    els.timeInput?.addEventListener('change', (e) => { 
+      selectedTime = e.target.value; 
+      if (!validateTime()) {
+        const start = currentBarberAvailability.startTime || '09:00';
+        const end = currentBarberAvailability.endTime || '18:00';
+        els.queueInfo.textContent = `Este barbeiro trabalha de ${start} às ${end}. Escolha outro horário.`;
+        els.joinQueueBtn.disabled = true;
+        return;
+      }
+      updateQueuePreview(); 
+    });
 
     async function updateQueuePreview(){
-      if (!selectedBarber || !selectedDate || !selectedTime){ els.queueInfo.textContent = 'Escolha barbeiro, data e horário.'; els.joinQueueBtn.disabled = true; return; }
+      if (!selectedBarber || !selectedDate || !selectedTime){ 
+        els.queueInfo.textContent = 'Escolha barbeiro, data e horário.'; 
+        els.joinQueueBtn.disabled = true; 
+        return; 
+      }
+      
+      const allowedDates = getAllowedDates();
+      if (!allowedDates.includes(selectedDate)) {
+        els.queueInfo.textContent = 'Apenas hoje e amanhã são permitidos.';
+        els.joinQueueBtn.disabled = true;
+        return;
+      }
+      
+      if (currentBarberAvailability && currentBarberAvailability.days) {
+        const dayOfWeek = new Date(selectedDate + 'T00:00:00').getDay().toString();
+        if (!currentBarberAvailability.days.includes(dayOfWeek)) {
+          els.queueInfo.textContent = 'Este barbeiro não trabalha neste dia.';
+          els.joinQueueBtn.disabled = true;
+          return;
+        }
+      }
+      
+      if (!validateTime()) {
+        const start = currentBarberAvailability.startTime || '09:00';
+        const end = currentBarberAvailability.endTime || '18:00';
+        els.queueInfo.textContent = `Horário inválido. Trabalha de ${start} às ${end}.`;
+        els.joinQueueBtn.disabled = true;
+        return;
+      }
+      
       const qRef = query(collection(db, 'queues'), where('barberId','==', selectedBarber), where('date','==', selectedDate), where('time','==', selectedTime));
       const { getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
       const docs = await getDocs(qRef);
@@ -159,14 +468,35 @@
 
     els.joinQueueBtn?.addEventListener('click', async () => {
       if (!currentUser || !selectedBarber || !selectedDate || !selectedTime) return;
-      const entry = { userId: currentUser.uid, userName: currentUser.displayName || currentUser.email, barberId: selectedBarber, date: selectedDate, time: selectedTime, createdAt: new Date().toISOString() };
-      const ref = await addDoc(collection(db, 'queues'), entry);
-      await showRingModal(selectedBarber, selectedDate, selectedTime, ref.id);
+      
+      try {
+        els.joinQueueBtn.disabled = true;
+        els.joinQueueBtn.textContent = 'Entrando...';
+        
+        const entry = { userId: currentUser.uid, userName: currentUser.displayName || currentUser.email, barberId: selectedBarber, date: selectedDate, time: selectedTime, createdAt: new Date().toISOString() };
+        const ref = await addDoc(collection(db, 'queues'), entry);
+        
+        // Armazena o ID do documento para poder remover depois
+        currentQueueId = ref.id;
+        
+        // Abre automaticamente o modal com a posição na fila
+        showRingModal(selectedBarber, selectedDate, selectedTime, ref.id);
+      } catch(e) {
+        console.error(e);
+        alert('Erro ao entrar na fila. Tente novamente.');
+      } finally {
+        els.joinQueueBtn.disabled = false;
+        els.joinQueueBtn.textContent = 'Entrar na fila';
+      }
     });
 
     async function showRingModal(barberId, date, time, myId){
       const qRef = query(collection(db, 'queues'), where('barberId','==', barberId), where('date','==', date), where('time','==', time), orderBy('createdAt'));
-      onSnapshot(qRef, (snap) => {
+      
+      // Cancela listener anterior se existir
+      if (queueListener) queueListener();
+      
+      queueListener = onSnapshot(qRef, (snap) => {
         const ids = [];
         snap.forEach(d => ids.push(d.id));
         const myPos = Math.max(1, ids.indexOf(myId) + 1);
@@ -175,6 +505,45 @@
         els.ringModal.classList.add('show');
       });
     }
+
+    els.leaveQueueBtn?.addEventListener('click', async () => {
+      if (!currentQueueId) return;
+      
+      try {
+        els.leaveQueueBtn.disabled = true;
+        els.leaveQueueBtn.textContent = 'Saindo...';
+        
+        const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        await deleteDoc(doc(db, 'queues', currentQueueId));
+        
+        // Cancela o listener
+        if (queueListener) {
+          queueListener();
+          queueListener = null;
+        }
+        
+        // Fecha o modal e reseta o estado
+        els.ringModal.classList.remove('show');
+        currentQueueId = null;
+        
+        // Limpa seleções e volta ao estado inicial
+        selectedBarber = null;
+        selectedDate = null;
+        selectedTime = null;
+        els.dateInput.value = '';
+        els.timeInput.value = '';
+        els.queueInfo.textContent = 'Escolha barbeiro, data e horário.';
+        els.joinQueueBtn.disabled = true;
+        
+        document.querySelectorAll('.barber-btn').forEach(b => b.classList.remove('ring-4'));
+      } catch(e) {
+        console.error(e);
+        alert('Erro ao sair da fila. Tente novamente.');
+      } finally {
+        els.leaveQueueBtn.disabled = false;
+        els.leaveQueueBtn.textContent = 'Deixar a fila';
+      }
+    });
 
     els.otherDateBtn?.addEventListener('click', () => { els.ringModal.classList.remove('show'); });
   </script>
@@ -210,11 +579,40 @@
   <div id="email-login-modal" class="modal-overlay">
     <div class="card rounded-2xl p-6 max-w-md w-full mx-4">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-bold" style="color:#151b29">Login</h2>
+        <h2 class="text-xl font-bold" style="color:#151b29">Autenticação</h2>
         <button id="close-email-modal" class="text-gray-600">✕</button>
       </div>
-      <p class="text-sm text-gray-600">Use Google no início. Email/senha será adicionado na próxima etapa.</p>
-      <button class="w-full zele-btn font-bold py-3 px-6 rounded-lg mt-3" onclick="document.getElementById('email-login-modal').classList.remove('show')">OK</button>
+      <p id="auth-error" class="text-sm text-red-600 mb-3"></p>
+      
+      <div id="email-login-form">
+        <input id="login-email" type="email" placeholder="Email" class="w-full border border-gray-300 rounded-lg px-4 py-3 mb-3">
+        <input id="login-password" type="password" placeholder="Senha" class="w-full border border-gray-300 rounded-lg px-4 py-3 mb-3">
+        <button id="login-btn" class="w-full zele-btn font-bold py-3 px-6 rounded-lg mb-3">Entrar</button>
+        <div class="text-center text-sm">
+          <a href="#" id="show-signup" class="text-blue-600 hover:underline">Criar conta</a>
+          <span class="mx-2 text-gray-400">•</span>
+          <a href="#" id="show-reset" class="text-blue-600 hover:underline">Esqueci a senha</a>
+        </div>
+      </div>
+
+      <div id="email-signup-form" class="hidden">
+        <input id="signup-name" type="text" placeholder="Nome completo" class="w-full border border-gray-300 rounded-lg px-4 py-3 mb-3">
+        <input id="signup-email" type="email" placeholder="Email" class="w-full border border-gray-300 rounded-lg px-4 py-3 mb-3">
+        <input id="signup-password" type="password" placeholder="Senha (mín. 6 caracteres)" class="w-full border border-gray-300 rounded-lg px-4 py-3 mb-3">
+        <button id="signup-btn" class="w-full zele-btn font-bold py-3 px-6 rounded-lg mb-3">Criar Conta</button>
+        <div class="text-center text-sm">
+          <a href="#" id="show-login" class="text-blue-600 hover:underline">Já tem conta? Entrar</a>
+        </div>
+      </div>
+
+      <div id="email-reset-form" class="hidden">
+        <p class="text-sm text-gray-600 mb-3">Digite seu email para receber o link de recuperação de senha.</p>
+        <input id="reset-email" type="email" placeholder="Email" class="w-full border border-gray-300 rounded-lg px-4 py-3 mb-3">
+        <button id="reset-btn" class="w-full zele-btn font-bold py-3 px-6 rounded-lg mb-3">Enviar Link</button>
+        <div class="text-center text-sm">
+          <a href="#" id="show-login" class="text-blue-600 hover:underline">Voltar ao login</a>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -252,9 +650,7 @@
       <div class="card rounded-xl p-6 mb-6">
         <h2 class="text-2xl font-bold mb-4" style="color:#151b29">Escolha o barbeiro</h2>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button class="barber-btn zele-btn rounded-lg py-6 text-lg font-bold" data-barber-id="barber1">Barbeiro 1</button>
-          <button class="barber-btn zele-btn rounded-lg py-6 text-lg font-bold" data-barber-id="barber2">Barbeiro 2</button>
-          <button class="barber-btn zele-btn rounded-lg py-6 text-lg font-bold" data-barber-id="barber3">Barbeiro 3</button>
+          <p class="col-span-3 text-center text-gray-600">Carregando barbeiros...</p>
         </div>
       </div>
 
@@ -286,7 +682,67 @@
         <span id="ring-number" class="text-5xl font-bold">0</span>
       </div>
       <p class="text-sm text-gray-600 mt-4">Número de pessoas à sua frente</p>
-      <button class="w-full zele-btn font-bold py-3 px-6 rounded-lg mt-6" onclick="document.getElementById('ring-modal').classList.remove('show')">Fechar</button>
+      <div class="flex gap-3 mt-6">
+        <button id="leave-queue-btn" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">Deixar a fila</button>
+        <button class="flex-1 zele-btn font-bold py-3 px-6 rounded-lg" onclick="document.getElementById('ring-modal').classList.remove('show')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="availability-modal" class="modal-overlay">
+    <div class="card rounded-2xl p-6 max-w-md w-full mx-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold" style="color:#151b29">Disponibilidade</h2>
+        <button id="close-availability-modal" class="text-gray-600">✕</button>
+      </div>
+      <p id="avail-barber-name" class="text-sm text-gray-600 mb-4 font-semibold"></p>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-semibold mb-2" style="color:#151b29">Dias da semana</label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" value="0" class="day-checkbox">
+            <span>Domingo</span>
+          </label>
+          <label class="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" value="1" class="day-checkbox">
+            <span>Segunda</span>
+          </label>
+          <label class="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" value="2" class="day-checkbox">
+            <span>Terça</span>
+          </label>
+          <label class="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" value="3" class="day-checkbox">
+            <span>Quarta</span>
+          </label>
+          <label class="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" value="4" class="day-checkbox">
+            <span>Quinta</span>
+          </label>
+          <label class="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" value="5" class="day-checkbox">
+            <span>Sexta</span>
+          </label>
+          <label class="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" value="6" class="day-checkbox">
+            <span>Sábado</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1" style="color:#151b29">Início</label>
+          <input id="avail-start-time" type="time" value="09:00" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1" style="color:#151b29">Fim</label>
+          <input id="avail-end-time" type="time" value="18:00" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+      </div>
+
+      <button id="save-availability-btn" class="w-full zele-btn font-bold py-3 px-6 rounded-lg">Salvar</button>
     </div>
   </div>
 
