@@ -20,6 +20,8 @@
     .card { background: white; border: 2px solid #e5e5e5; box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
     .modal-overlay { display:none; position:fixed; inset:0; background-color: rgba(0,0,0,.5); z-index: 9999; align-items:center; justify-content:center; }
     .modal-overlay.show { display:flex; }
+    #menu-drawer { transition: right 0.3s ease-in-out; }
+    #menu-drawer.show { right: 0 !important; }
   </style>
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
@@ -247,25 +249,34 @@
     els.menuCloseBtn?.addEventListener('click', closeMenu);
     els.menuOverlay?.addEventListener('click', closeMenu);
 
-      // Botão para abrir modal de fila admin
-      const adminQueueBtn = document.createElement('button');
-      adminQueueBtn.id = 'menu-queue-btn';
-      adminQueueBtn.className = 'w-full p-3 border rounded-lg text-left hover:bg-gray-50';
-      adminQueueBtn.textContent = '👥 Fila de clientes';
-      adminQueueBtn.addEventListener('click', () => {
-        closeMenu();
-        showAdminQueueModal();
-      });
-      document.getElementById('menu-drawer').querySelector('.space-y-2').appendChild(adminQueueBtn);
+    // Adicionar botão de fila de clientes ao menu quando o DOM estiver pronto
+    window.addEventListener('DOMContentLoaded', () => {
+      const menuContainer = document.querySelector('#menu-drawer .space-y-2');
+      if (menuContainer) {
+        const adminQueueBtn = document.createElement('button');
+        adminQueueBtn.id = 'menu-queue-btn';
+        adminQueueBtn.className = 'w-full p-3 border rounded-lg text-left hover:bg-gray-50';
+        adminQueueBtn.textContent = '👥 Fila de clientes';
+        adminQueueBtn.addEventListener('click', () => {
+          closeMenu();
+          showAdminQueueModal();
+        });
+        menuContainer.appendChild(adminQueueBtn);
+      }
+    });
 
     els.adminBtn?.addEventListener('click', () => { closeMenu(); els.app.classList.add('hidden'); els.adminPage.classList.remove('hidden'); loadAdminBarbers(); });
     els.backFromAdmin?.addEventListener('click', () => { els.adminPage.classList.add('hidden'); els.app.classList.remove('hidden'); });
 
     async function loadAdminBarbers(){
-      els.adminBarberList.innerHTML = '';
+      els.adminBarberList.innerHTML = '<div class="text-center text-gray-500 p-4">Carregando...</div>';
       const qRef = query(collection(db, 'barbers'), orderBy('name'));
       onSnapshot(qRef, (snap) => {
         els.adminBarberList.innerHTML = '';
+        if (snap.empty) {
+          els.adminBarberList.innerHTML = '<div class="text-center text-gray-500 p-4">Nenhum barbeiro cadastrado ainda.</div>';
+          return;
+        }
         snap.forEach(docu => {
           const d = docu.data();
           const li = document.createElement('div');
@@ -280,6 +291,9 @@
           `;
           els.adminBarberList.appendChild(li);
         });
+      }, (error) => {
+        console.error('Erro ao carregar barbeiros:', error);
+        els.adminBarberList.innerHTML = '<div class="text-center text-red-600 p-4">⚠️ Erro de permissão. Configure as regras do Firestore.</div>';
       });
     }
 
@@ -360,6 +374,9 @@
               await deleteDoc(doc(db, 'queues', id));
             });
           });
+        }, (error) => {
+          console.error('Erro ao carregar fila:', error);
+          els.adminQueueList.innerHTML = '<div class="text-center text-red-600">⚠️ Erro de permissão. Configure as regras do Firestore.</div>';
         });
       }
 
@@ -403,6 +420,9 @@
           });
           barberContainer.appendChild(btn);
         });
+      }, (error) => {
+        console.error('Erro ao carregar barbeiros:', error);
+        barberContainer.innerHTML = '<p class="col-span-3 text-center text-red-600">⚠️ Erro de permissão. Configure as regras do Firestore.</p>';
       });
     }
 
