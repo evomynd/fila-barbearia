@@ -730,6 +730,8 @@
         const card = document.createElement('div');
         card.className = 'card p-4 rounded-lg cursor-pointer hover:shadow-lg transition-shadow';
         card.style.borderLeft = '4px solid #151b29';
+        card.style.backgroundColor = 'white';
+        card.style.color = 'black';
         
         const count = queuesData.filter(d => d.time === timeStr).length;
         console.log('🕐 Criando card:', { timeStr, count });
@@ -756,6 +758,13 @@
       }
 
       console.log('✅ Cards criados:', timesGrid.children.length);
+      console.log('📐 Grid info:', { 
+        width: timesGrid.offsetWidth, 
+        height: timesGrid.offsetHeight, 
+        display: getComputedStyle(timesGrid).display,
+        parentDisplay: getComputedStyle(timesContainer).display,
+        innerHTML: timesGrid.innerHTML.length
+      });
       if (timesGrid.children.length === 0) {
         timesGrid.innerHTML = '<p class="col-span-3 text-center text-gray-600">Nenhum horário disponível hoje.</p>';
       }
