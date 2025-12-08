@@ -643,9 +643,11 @@
           btn.dataset.barberId = docu.id;
           btn.textContent = d.name;
           btn.addEventListener('click', () => {
+            console.log('Barbeiro clicado:', { docId: docu.id, name: d.name, availability: d.availability });
             selectedBarber = docu.id;
             selectedBarberName = d.name; // Armazenar o nome do barbeiro
             currentBarberAvailability = d.availability || null;
+            console.log('Estado após clique:', { selectedBarber, selectedBarberName, currentBarberAvailability });
             showQueueTimes();
           });
           barberContainer.appendChild(btn);
@@ -658,6 +660,8 @@
 
     // Função para mostrar cards de horários
     async function showQueueTimes() {
+      console.log('showQueueTimes chamada com:', { selectedBarber, selectedBarberName, currentBarberAvailability });
+      
       const barberContainer = document.querySelector('.grid.grid-cols-1.sm\\:grid-cols-3');
       const timesContainer = document.getElementById('queue-times-container');
       
@@ -669,11 +673,35 @@
       timesGrid.innerHTML = '';
 
       const today = getTodayInSaoPaulo();
-      if (!currentBarberAvailability || !currentBarberAvailability.days) return;
+      
+      if (!currentBarberAvailability) {
+        console.log('❌ Nenhuma disponibilidade de barbeiro encontrada - usando padrão');
+        // Usar disponibilidade padrão: segunda a sábado, 08:00-17:00
+        currentBarberAvailability = {
+          days: ['1', '2', '3', '4', '5', '6'], // seg-sab
+          startTime: '08:00',
+          endTime: '17:00'
+        };
+      }
+      
+      if (!currentBarberAvailability.days || currentBarberAvailability.days.length === 0) {
+        console.log('❌ Nenhum dia disponível - usando padrão');
+        currentBarberAvailability.days = ['1', '2', '3', '4', '5', '6']; // seg-sab
+      }
+      
+      if (!currentBarberAvailability.startTime) {
+        currentBarberAvailability.startTime = '08:00';
+      }
+      
+      if (!currentBarberAvailability.endTime) {
+        currentBarberAvailability.endTime = '17:00';
+      }
 
       const dayOfWeek = new Date(today + 'T00:00:00').getDay().toString();
+      console.log('🔍 Verificando disponibilidade:', { today, dayOfWeek, availableDays: currentBarberAvailability.days, startTime: currentBarberAvailability.startTime, endTime: currentBarberAvailability.endTime });
+      
       if (!currentBarberAvailability.days.includes(dayOfWeek)) {
-        timesGrid.innerHTML = '<p class="col-span-3 text-center text-gray-600">Este barbeiro não trabalha hoje.</p>';
+        timesGrid.innerHTML = '<p class="col-span-3 text-center text-gray-600">Este barbeiro não trabalha hoje (dia ' + dayOfWeek + ').</p>';
         return;
       }
 
