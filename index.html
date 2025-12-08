@@ -41,7 +41,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, where, orderBy, updateDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, query, where, orderBy, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyCyTJVlgvkLa2-SUNaxAlOiTezcXfjiP64",
@@ -59,6 +59,7 @@
     provider.setCustomParameters({ prompt: 'select_account' });
 
     let currentUser = null;
+    let userRole = null; // 'owner', 'barber', 'customer'
     let selectedBarber = null;
     let selectedDate = null;
     let selectedTime = null;
@@ -66,6 +67,7 @@
     let currentBarberAvailability = null;
     let currentQueueId = null;
     let queueListener = null;
+    let currentQueueInfo = null; // Armazena info da fila atual: {barberId, barberName, date, time}
 
     function getTodayInSaoPaulo() {
       const now = new Date();
@@ -240,15 +242,40 @@
     });
 
     onAuthStateChanged(auth, async (user) => {
-      if (user) { currentUser = user; await ensureUserDoc(user); updateUserUI(user); loadBarbers(); showApp(); } else { showLogin(); }
+      if (user) { 
+        currentUser = user; 
+        await ensureUserDoc(user); 
+        updateUserUI(user); 
+        // Carregar role do Firestore
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        userRole = userDoc.data()?.role || 'customer';
+        // Mostrar/ocultar elementos baseado na role
+        updateUIByRole();
+        loadBarbers(); 
+        showApp(); 
+      } else { 
+        showLogin(); 
+      }
     });
 
     async function ensureUserDoc(user){
       const ref = doc(db, 'users', user.uid);
       const snap = await getDoc(ref);
-      const base = { email: user.email, displayName: user.displayName || user.email.split('@')[0], role: 'user', createdAt: new Date().toISOString() };
+      
+      // Definir role: leandroalves.facilities é sempre owner
+      const role = user.email === 'leandroalves.facilities@gmail.com' ? 'owner' : 'customer';
+      
+      const base = { 
+        email: user.email, 
+        displayName: user.displayName || user.email.split('@')[0], 
+        role: role,
+        createdAt: new Date().toISOString() 
+      };
+      
       if (!snap.exists()) await setDoc(ref, base);
       else await setDoc(ref, { lastLogin: new Date().toISOString() }, { merge: true });
+      
+      userRole = role;
     }
 
     function updateUserUI(user){
@@ -256,6 +283,41 @@
       els.userName.textContent = user.displayName || 'Usuário';
       els.userEmail.textContent = user.email;
       els.userPhoto.src = user.photoURL || defaultPhoto;
+    }
+
+    function updateUIByRole(){
+      // Owner: vê tudo (admin, fila, check-in, gerenciar acesso)
+      // Barber: vê fila e check-in (não barbeiros e não pode entrar na fila)
+      // Customer: só entra na fila (vê barbeiros e horários)
+      
+      const mainCard = document.querySelector('.card.rounded-xl.p-6.mb-6');
+      const adminBtn = document.getElementById('menu-admin-btn');
+      const queueBtn = document.getElementById('menu-queue-btn');
+      const checkinBtn = document.getElementById('menu-checkin-btn');
+      const accessBtn = document.getElementById('menu-access-btn');
+      
+      if (userRole === 'customer') {
+        // Clientes veem apenas a seleção de barbeiros
+        if (queueBtn) queueBtn.style.display = 'none';
+        if (checkinBtn) checkinBtn.style.display = 'none';
+        if (accessBtn) accessBtn.style.display = 'none';
+        if (adminBtn) adminBtn.style.display = 'none';
+        if (mainCard) mainCard.style.display = 'block';
+      } else if (userRole === 'barber') {
+        // Barbeiros veem fila e check-in, não veem o card de escolher barbeiros
+        if (adminBtn) adminBtn.style.display = 'none';
+        if (accessBtn) accessBtn.style.display = 'none';
+        if (mainCard) mainCard.style.display = 'none';
+        if (queueBtn) queueBtn.style.display = 'block';
+        if (checkinBtn) checkinBtn.style.display = 'block';
+      } else if (userRole === 'owner') {
+        // Owner vê tudo
+        if (queueBtn) queueBtn.style.display = 'block';
+        if (checkinBtn) checkinBtn.style.display = 'block';
+        if (accessBtn) accessBtn.style.display = 'block';
+        if (adminBtn) adminBtn.style.display = 'block';
+        if (mainCard) mainCard.style.display = 'block';
+      }
     }
 
     function openMenu(){ els.menuOverlay.classList.add('show'); els.menuDrawer.classList.add('show'); }
@@ -288,6 +350,17 @@
         });
         menuContainer.appendChild(checkinBtn);
 
+        // Botão de Gerenciar Acesso (apenas para owner)
+        const accessBtn = document.createElement('button');
+        accessBtn.id = 'menu-access-btn';
+        accessBtn.className = 'w-full p-3 border rounded-lg text-left hover:bg-gray-50';
+        accessBtn.textContent = '🔐 Gerenciar Acesso';
+        accessBtn.addEventListener('click', () => {
+          closeMenu();
+          showManageAccessPage();
+        });
+        menuContainer.appendChild(accessBtn);
+
         // Adicionar separador
         const separator = document.createElement('div');
         separator.className = 'border-t my-2';
@@ -303,6 +376,7 @@
           try {
             await signOut(auth);
             currentUser = null;
+            userRole = null;
             selectedBarber = null;
             selectedDate = null;
             selectedTime = null;
@@ -457,9 +531,79 @@
       if (!barberContainer) return;
       barberContainer.innerHTML = '<p class="col-span-3 text-center text-gray-600">Carregando barbeiros...</p>';
       
+      // Verifica se o usuário está em uma fila hoje
+      if (currentUser) {
+        const today = getTodayInSaoPaulo();
+        const userQueuesRef = query(
+          collection(db, 'queues'),
+          where('userId', '==', currentUser.uid),
+          where('date', '==', today)
+        );
+        const { getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const userQueueSnap = await getDocs(userQueuesRef);
+
+        if (!userQueueSnap.empty) {
+          const queueEntry = userQueueSnap.docs[0];
+          const queueData = queueEntry.data();
+          currentQueueId = queueEntry.id;
+          currentQueueInfo = {
+            barberId: queueData.barberId,
+            barberName: queueData.barberId,
+            date: queueData.date,
+            time: queueData.time,
+            queueId: queueEntry.id
+          };
+
+          // Adiciona card de fila atual no topo
+          const queueCard = document.createElement('div');
+          queueCard.className = 'col-span-3 card p-6 rounded-xl mb-6 bg-green-50 border-2 border-green-600';
+          queueCard.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm text-gray-600">Você está na fila de:</p>
+                <p class="text-2xl font-bold text-green-600">${queueData.barberId}</p>
+                <p class="text-sm text-gray-600">Horário: ${queueData.time} - ${String(parseInt(queueData.time) + 1).padStart(2, '0')}:00</p>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="w-24 h-24 rounded-full bg-green-600 text-white flex items-center justify-center">
+                  <span id="current-position-number" class="text-4xl font-bold">-</span>
+                </div>
+                <p class="text-xs text-gray-600 mt-2 text-center">sua posição</p>
+              </div>
+            </div>
+            <button onclick="document.getElementById('ring-modal').classList.add('show')" class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+              Ver detalhes
+            </button>
+          `;
+
+          // Insere o card na container (como primeiro child)
+          barberContainer.parentElement.insertBefore(queueCard, barberContainer.parentElement.firstChild);
+
+          // Carrega posição em tempo real
+          const qRef = query(
+            collection(db, 'queues'),
+            where('barberId', '==', queueData.barberId),
+            where('date', '==', queueData.date),
+            where('time', '==', queueData.time),
+            orderBy('createdAt')
+          );
+          
+          if (queueListener) queueListener();
+          queueListener = onSnapshot(qRef, (snap) => {
+            const ids = [];
+            snap.forEach(d => ids.push(d.id));
+            const myPos = Math.max(1, ids.indexOf(queueEntry.id) + 1);
+            document.getElementById('current-position-number').textContent = myPos;
+          });
+        }
+      }
+      
       const qRef = query(collection(db, 'barbers'), orderBy('name'));
       onSnapshot(qRef, (snap) => {
+        // Mantém o card de fila se existir
+        const existingQueueCard = barberContainer.parentElement?.querySelector('.bg-green-50');
         barberContainer.innerHTML = '';
+        
         if (snap.empty) {
           barberContainer.innerHTML = '<p class="col-span-3 text-center text-gray-600">Nenhum barbeiro cadastrado. Use o menu Admin.</p>';
           return;
@@ -564,7 +708,7 @@
       document.getElementById('confirm-barber-name').textContent = barberName;
       document.getElementById('confirm-time').textContent = `${selectedTime} - ${String(parseInt(selectedTime) + 1).padStart(2, '0')}:00`;
       document.getElementById('confirm-queue-count').textContent = currentCount;
-      document.getElementById('confirm-position').textContent = `${position}º`;
+      document.getElementById('confirm-position').textContent = `${position}º será sua posição na fila`;
 
       confirmModal.classList.add('show');
     }
@@ -588,6 +732,35 @@
       if (!currentUser || !selectedBarber || !selectedDate || !selectedTime) return;
 
       try {
+        // Verifica se o usuário já está em uma fila hoje
+        const today = getTodayInSaoPaulo();
+        const userQueuesRef = query(
+          collection(db, 'queues'),
+          where('userId', '==', currentUser.uid),
+          where('date', '==', today)
+        );
+        const { getDocs } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        const userQueueSnap = await getDocs(userQueuesRef);
+
+        if (!userQueueSnap.empty) {
+          // Usuário já está em uma fila
+          const existingQueue = userQueueSnap.docs[0].data();
+          const barberBtn = document.querySelector(`.barber-btn[data-barber-id="${selectedBarber}"]`);
+          const newBarberName = barberBtn?.textContent || selectedBarber;
+          const oldBarberName = existingQueue.barberId; // TODO: buscar nome real do barbeiro antigo
+          
+          const confirmSwitch = confirm(
+            `Você já está na fila do barbeiro "${oldBarberName}" às ${existingQueue.time}.\n\n` +
+            `Deseja sair dessa fila e entrar na fila do barbeiro "${newBarberName}" às ${selectedTime}?`
+          );
+
+          if (!confirmSwitch) return;
+
+          // Remove da fila anterior
+          await deleteDoc(doc(db, 'queues', userQueueSnap.docs[0].id));
+        }
+
+        // Adiciona à nova fila
         const entry = {
           userId: currentUser.uid,
           userName: currentUser.displayName || currentUser.email,
@@ -599,8 +772,25 @@
         const ref = await addDoc(collection(db, 'queues'), entry);
         currentQueueId = ref.id;
 
+        // Armazena info da fila atual
+        const barberBtn = document.querySelector(`.barber-btn[data-barber-id="${selectedBarber}"]`);
+        currentQueueInfo = {
+          barberId: selectedBarber,
+          barberName: barberBtn?.textContent || selectedBarber,
+          date: selectedDate,
+          time: selectedTime,
+          queueId: ref.id
+        };
+
+        // Fecha o modal de confirmação
         document.getElementById('confirm-queue-modal').classList.remove('show');
+        
+        // Mostra o anel de posição NA FILA
         showRingModal(selectedBarber, selectedDate, selectedTime, ref.id);
+        
+        // Reseta a tela de horários
+        const timesContainer = document.getElementById('queue-times-container');
+        timesContainer.classList.add('hidden');
       } catch(e) {
         console.error(e);
         alert('Erro ao entrar na fila. Tente novamente.');
@@ -617,8 +807,17 @@
         const ids = [];
         snap.forEach(d => ids.push(d.id));
         const myPos = Math.max(1, ids.indexOf(myId) + 1);
-        const ahead = Math.max(0, myPos - 1);
-        els.ringNumber.textContent = ahead;
+        
+        els.ringNumber.textContent = myPos;
+        document.getElementById('ring-position-text').textContent = `${myPos}º sua posição na fila`;
+        
+        // Muda para verde
+        const ringCircle = document.querySelector('#ring-modal .border-blue-600');
+        if (ringCircle) {
+          ringCircle.classList.remove('border-blue-600');
+          ringCircle.classList.add('border-green-600');
+        }
+        
         els.ringModal.classList.add('show');
       });
     }
@@ -642,6 +841,7 @@
         // Fecha o modal e reseta o estado
         els.ringModal.classList.remove('show');
         currentQueueId = null;
+        currentQueueInfo = null;
         
         // Limpa seleções e volta ao estado inicial
         selectedBarber = null;
@@ -653,6 +853,9 @@
         els.joinQueueBtn.disabled = true;
         
         document.querySelectorAll('.barber-btn').forEach(b => b.classList.remove('ring-4'));
+        
+        // Mostra tela inicial
+        els.app.classList.remove('hidden');
       } catch(e) {
         console.error(e);
         alert('Erro ao sair da fila. Tente novamente.');
@@ -820,6 +1023,144 @@
         alert('Erro ao processar check-in');
       }
     }
+
+    // ===== PÁGINA DE GERENCIAR ACESSO =====
+    function showManageAccessPage() {
+      if (userRole !== 'owner') {
+        alert('Apenas o dono da barbearia pode acessar esta função.');
+        return;
+      }
+      els.app.classList.add('hidden');
+      document.getElementById('manage-access-page').classList.remove('hidden');
+      loadUsersList();
+    }
+
+    document.getElementById('back-from-manage-access')?.addEventListener('click', () => {
+      document.getElementById('manage-access-page').classList.add('hidden');
+      els.app.classList.remove('hidden');
+    });
+
+    async function loadUsersList() {
+      const usersList = document.getElementById('users-list');
+      usersList.innerHTML = '<div class="text-center text-gray-500 p-4">Carregando usuários...</div>';
+
+      try {
+        const { getDocs: firestoreGetDocs, query: firestoreQuery, orderBy: firestoreOrderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+        
+        const usersRef = collection(db, 'users');
+        const q = firestoreQuery(usersRef, firestoreOrderBy('email', 'asc'));
+        const usersSnapshot = await firestoreGetDocs(q);
+
+        if (usersSnapshot.empty) {
+          usersList.innerHTML = '<p class="text-center text-gray-500 py-8">Nenhum usuário encontrado.</p>';
+          return;
+        }
+
+        const users = [];
+        usersSnapshot.forEach(doc => {
+          const data = doc.data();
+          users.push({
+            id: doc.id,
+            email: data.email || 'Sem email',
+            displayName: data.displayName || data.email?.split('@')[0] || 'Sem nome',
+            role: data.role || 'customer',
+            createdAt: data.createdAt || '',
+            lastLogin: data.lastLogin || ''
+          });
+        });
+
+        // Ordenar por role (owner > barber > customer)
+        users.sort((a, b) => {
+          const roleOrder = { owner: 0, barber: 1, customer: 2 };
+          const roleCompare = roleOrder[a.role] - roleOrder[b.role];
+          if (roleCompare !== 0) return roleCompare;
+          return (a.displayName || a.email).localeCompare(b.displayName || b.email);
+        });
+
+        usersList.innerHTML = '';
+        users.forEach(user => {
+          const isCurrentUser = user.id === currentUser.uid;
+          const roleBadges = {
+            owner: '👑 Dono',
+            barber: '✂️ Barbeiro',
+            customer: '👤 Cliente'
+          };
+          const roleBadge = roleBadges[user.role] || user.role;
+
+          const userCard = document.createElement('div');
+          userCard.className = `card p-4 rounded-lg border-l-4 ${user.role === 'owner' ? 'border-purple-500 bg-purple-50' : user.role === 'barber' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'}`;
+          
+          userCard.innerHTML = `
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="font-bold text-gray-800">${user.displayName} ${isCurrentUser ? '(você)' : ''}</p>
+                <p class="text-sm text-gray-600">${user.email}</p>
+              </div>
+              <span class="text-sm font-semibold px-3 py-1 rounded-full ${user.role === 'owner' ? 'bg-purple-200 text-purple-800' : user.role === 'barber' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-800'}">
+                ${roleBadge}
+              </span>
+            </div>
+
+            <div class="flex gap-2">
+              ${!isCurrentUser ? `
+                <select onchange="changeUserRole('${user.id}', this.value)" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                  <option value="customer" ${user.role === 'customer' ? 'selected' : ''}>👤 Cliente</option>
+                  <option value="barber" ${user.role === 'barber' ? 'selected' : ''}>✂️ Barbeiro</option>
+                  <option value="owner" ${user.role === 'owner' ? 'selected' : ''}>👑 Dono</option>
+                </select>
+                <button onclick="deleteUser('${user.id}', '${user.displayName}')" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                  🗑️ Remover
+                </button>
+              ` : `
+                <span class="text-sm text-gray-500 px-3 py-2">Seu usuário</span>
+              `}
+            </div>
+          `;
+
+          usersList.appendChild(userCard);
+        });
+      } catch(e) {
+        console.error('Erro ao carregar usuários:', e);
+        usersList.innerHTML = '<p class="text-center text-red-600 py-8">⚠️ Erro ao carregar usuários.</p>';
+      }
+    }
+
+    window.changeUserRole = async (userId, newRole) => {
+      if (!currentUser || userRole !== 'owner') {
+        alert('Apenas o dono pode alterar roles.');
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, 'users', userId), { role: newRole });
+        alert('Role alterado com sucesso!');
+        loadUsersList();
+      } catch(e) {
+        console.error('Erro ao alterar role:', e);
+        alert('Erro ao alterar role do usuário.');
+      }
+    };
+
+    window.deleteUser = async (userId, userName) => {
+      if (!currentUser || userRole !== 'owner') {
+        alert('Apenas o dono pode remover usuários.');
+        return;
+      }
+
+      if (!confirm(`Tem certeza que deseja remover ${userName}? Esta ação não pode ser desfeita.`)) {
+        return;
+      }
+
+      try {
+        await deleteDoc(doc(db, 'users', userId));
+        alert('Usuário removido com sucesso!');
+        loadUsersList();
+      } catch(e) {
+        console.error('Erro ao remover usuário:', e);
+        alert('Erro ao remover usuário.');
+      }
+    };
+
   </script>
   <script>
     if ('serviceWorker' in navigator) {
@@ -947,7 +1288,7 @@
       <div class="mx-auto w-40 h-40 rounded-full border-[10px] border-blue-600 flex items-center justify-center">
         <span id="ring-number" class="text-5xl font-bold">0</span>
       </div>
-      <p class="text-sm text-gray-600 mt-4">Número de pessoas à sua frente</p>
+      <p id="ring-position-text" class="text-sm text-gray-600 mt-4">Número de pessoas à sua frente</p>
       <div class="flex gap-3 mt-6">
         <button id="leave-queue-btn" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">Deixar a fila</button>
         <button class="flex-1 zele-btn font-bold py-3 px-6 rounded-lg" onclick="document.getElementById('ring-modal').classList.remove('show')">Fechar</button>
@@ -1070,6 +1411,24 @@
           <button id="admin-add-barber-btn" class="zele-btn px-4 py-2 rounded-lg font-semibold">Adicionar</button>
         </div>
         <div id="admin-barber-list" class="space-y-2"></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="manage-access-page" class="hidden">
+    <header class="zele-primary text-white">
+      <div class="container mx-auto px-4 py-4 flex items-center gap-3">
+        <button id="back-from-manage-access" class="zele-btn p-2 rounded-lg">←</button>
+        <h1 class="text-2xl font-bold">Gerenciar Acesso</h1>
+      </div>
+    </header>
+    <main class="container mx-auto px-4 py-8 max-w-3xl">
+      <div class="card rounded-xl p-6">
+        <h2 class="text-2xl font-bold mb-4" style="color:#151b29">👥 Usuários do Sistema</h2>
+        <p class="text-sm text-gray-600 mb-6">Gerencie permissões, altere roles e controle acesso ao sistema.</p>
+        <div id="users-list" class="space-y-3">
+          <div class="text-center text-gray-500 p-4">Carregando usuários...</div>
+        </div>
       </div>
     </main>
   </div>
