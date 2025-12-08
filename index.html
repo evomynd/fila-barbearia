@@ -658,8 +658,10 @@
 
     // Função para mostrar cards de horários
     async function showQueueTimes() {
+      console.log('🚀 showQueueTimes iniciada');
       const barberContainer = document.querySelector('.grid.grid-cols-1.sm\\:grid-cols-3');
       const timesContainer = document.getElementById('queue-times-container');
+      console.log('📦 Containers:', { barberContainer, timesContainer });
       
       // Hide main app, show times container
       els.app.classList.add('hidden');
@@ -692,6 +694,7 @@
       }
 
       const dayOfWeek = new Date(today + 'T00:00:00').getDay().toString();
+      console.log('📅 Data e horário:', { today, dayOfWeek, availableDays: currentBarberAvailability.days });
       
       if (!currentBarberAvailability.days.includes(dayOfWeek)) {
         timesGrid.innerHTML = '<p class="col-span-3 text-center text-gray-600">Este barbeiro não trabalha hoje (dia ' + dayOfWeek + ').</p>';
@@ -702,6 +705,7 @@
       const endHour = parseInt(currentBarberAvailability.endTime.split(':')[0]);
       const now = new Date();
       const currentHour = now.getHours();
+      console.log('⏰ Horários:', { startHour, endHour, currentHour, timeString: currentBarberAvailability.startTime + ' - ' + currentBarberAvailability.endTime });
 
       // Carregar todas as filas do barbeiro para hoje de uma vez
       const qRef = query(
@@ -711,19 +715,24 @@
       );
       const allDocs = await getDocs(qRef);
       const queuesData = allDocs.docs.map(d => d.data());
+      console.log('📊 Filas carregadas:', { total: queuesData.length, data: queuesData });
 
       for (let hour = startHour; hour < endHour; hour++) {
         const timeStr = String(hour).padStart(2, '0') + ':00';
         const nextHour = String(hour + 1).padStart(2, '0') + ':00';
         
         // Não mostrar horários passados
-        if (hour < currentHour) continue;
+        if (hour < currentHour) {
+          console.log('⏭️ Pulando horário passado:', timeStr);
+          continue;
+        }
 
         const card = document.createElement('div');
         card.className = 'card p-4 rounded-lg cursor-pointer hover:shadow-lg transition-shadow';
         card.style.borderLeft = '4px solid #151b29';
         
         const count = queuesData.filter(d => d.time === timeStr).length;
+        console.log('🕐 Criando card:', { timeStr, count });
 
         card.innerHTML = `
           <div class="mb-3">
@@ -746,6 +755,7 @@
         timesGrid.appendChild(card);
       }
 
+      console.log('✅ Cards criados:', timesGrid.children.length);
       if (timesGrid.children.length === 0) {
         timesGrid.innerHTML = '<p class="col-span-3 text-center text-gray-600">Nenhum horário disponível hoje.</p>';
       }
