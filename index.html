@@ -251,7 +251,14 @@
         userRole = userDoc.data()?.role || 'customer';
         // Mostrar/ocultar elementos baseado na role
         updateUIByRole();
-        loadBarbers(); 
+        
+        // Owner e Barber veem a fila de clientes
+        if (userRole === 'owner' || userRole === 'barber') {
+          showAdminQueueModal();
+        } else {
+          // Clientes veem os barbeiros
+          loadBarbers();
+        }
         showApp(); 
       } else { 
         showLogin(); 
@@ -286,9 +293,9 @@
     }
 
     function updateUIByRole(){
-      // Owner: vê tudo (admin, fila, check-in, gerenciar acesso)
-      // Barber: vê fila e check-in (não barbeiros e não pode entrar na fila)
-      // Customer: só entra na fila (vê barbeiros e horários)
+      // Owner: vê fila de clientes (não vê barbeiros)
+      // Barber: vê fila de clientes (não vê barbeiros)
+      // Customer: só vê barbeiros para entrar na fila
       
       const mainCard = document.querySelector('.card.rounded-xl.p-6.mb-6');
       const adminBtn = document.getElementById('menu-admin-btn');
@@ -311,12 +318,12 @@
         if (queueBtn) queueBtn.style.display = 'block';
         if (checkinBtn) checkinBtn.style.display = 'block';
       } else if (userRole === 'owner') {
-        // Owner vê tudo
+        // Owner vê tudo EXCETO o card de barbeiros (vê fila de clientes como primeira tela)
         if (queueBtn) queueBtn.style.display = 'block';
         if (checkinBtn) checkinBtn.style.display = 'block';
         if (accessBtn) accessBtn.style.display = 'block';
         if (adminBtn) adminBtn.style.display = 'block';
-        if (mainCard) mainCard.style.display = 'block';
+        if (mainCard) mainCard.style.display = 'none'; // Owner NÃO vê o card de escolher barbeiros
       }
     }
 
@@ -476,17 +483,37 @@
       async function showAdminQueueModal() {
         els.adminQueueModal.classList.add('show');
         els.adminQueueList.innerHTML = '<div class="text-center text-gray-500">Carregando fila...</div>';
-        // Busca todos os clientes na fila, ordenados por data/hora de inclusão
+        // Busca todos os clientes na fila do dia (sem orderBy para evitar índice composto)
         const today = getTodayInSaoPaulo();
-        const qRef = query(collection(db, 'queues'), where('date', '==', today), orderBy('createdAt'));
+        const qRef = query(collection(db, 'queues'), where('date', '==', today));
         onSnapshot(qRef, (snap) => {
           if (snap.empty) {
             els.adminQueueList.innerHTML = '<div class="text-center text-gray-500">Nenhum cliente na fila.</div>';
             return;
           }
-          els.adminQueueList.innerHTML = '';
+          
+          // Ordena em memória por barbeiro, tempo, e createdAt
+          const allDocs = [];
           snap.forEach(docu => {
-            const d = docu.data();
+            allDocs.push({ docu, data: docu.data() });
+          });
+          
+          allDocs.sort((a, b) => {
+            const barberA = a.data.barberId || '';
+            const barberB = b.data.barberId || '';
+            if (barberA !== barberB) return barberA.localeCompare(barberB);
+            
+            const timeA = a.data.time || '';
+            const timeB = b.data.time || '';
+            if (timeA !== timeB) return timeA.localeCompare(timeB);
+            
+            return new Date(a.data.createdAt) - new Date(b.data.createdAt);
+          });
+          
+          els.adminQueueList.innerHTML = '';
+          allDocs.forEach(item => {
+            const docu = item.docu;
+            const d = item.data;
             const card = document.createElement('div');
             card.className = 'card p-4 mb-3 flex items-center justify-between';
             card.innerHTML = `
@@ -531,8 +558,8 @@
       if (!barberContainer) return;
       barberContainer.innerHTML = '<p class="col-span-3 text-center text-gray-600">Carregando barbeiros...</p>';
       
-      // Verifica se o usuário está em uma fila hoje
-      if (currentUser) {
+      // Verifica se o usuário está em uma fila hoje (apenas para clientes)
+      if (currentUser && userRole === 'customer') {
         const today = getTodayInSaoPaulo();
         const userQueuesRef = query(
           collection(db, 'queues'),
