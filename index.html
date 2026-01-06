@@ -134,6 +134,18 @@
                         </button>
                     </div>
 
+                    <!-- STATE 3: NO SHOW WARNING -->
+                    <div id="noShowNotice" class="hidden w-full bg-red-500/10 border border-red-500/30 rounded-xl p-6 text-center">
+                        <div class="text-red-500 text-4xl mb-2"><i class="fa-solid fa-exclamation-triangle"></i></div>
+                        <h3 class="text-white font-bold text-lg mb-1">Você perdeu sua vez!</h3>
+                        <p class="text-red-400 text-sm mb-4 font-bold">VOCÊ NÃO ESTAVA NO SALÃO</p>
+                        <p class="text-slate-400 text-xs mb-4">Você pode entrar na fila novamente se desejar.</p>
+                        
+                        <button onclick="clearNoShowAndRejoin()" class="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold py-3 rounded-xl shadow-lg transition">
+                            Entrar na Fila Novamente
+                        </button>
+                    </div>
+
                     <div id="joinMessage" class="hidden text-center p-3 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm font-medium fade-in">
                         <i class="fa-solid fa-check-circle mr-1"></i> Você entrou na fila!
                     </div>
@@ -173,7 +185,7 @@
 
                 <!-- Active Cut -->
                 <div id="activeCutContainer" class="hidden mb-6 fade-in">
-                    <div class="bg-gradient-to-r from-emerald-900/40 to-slate-800 border border-emerald-500/30 rounded-2xl p-6 flex items-center justify-between shadow-lg relative overflow-hidden">
+                    <div id="activeCutContent" class="bg-gradient-to-r from-emerald-900/40 to-slate-800 border border-emerald-500/30 rounded-2xl p-6 flex items-center justify-between shadow-lg relative overflow-hidden">
                         <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-emerald-500 blur-3xl opacity-20 rounded-full"></div>
                         <div class="flex items-center gap-6 relative z-10">
                             <div class="bg-emerald-500/20 p-4 rounded-full text-emerald-400 animate-pulse">
@@ -449,11 +461,21 @@
                 renderBarberGrid(); 
                 if(loggedInMode === 'admin') renderAdminList(); 
                 
-                if (selectedBarber && !loggedInMode) {
+                // Atualizar selectedBarber se o barbeiro logado ou selecionado mudou
+                if (selectedBarber) {
                     const freshBarber = barbersData.find(b => b.id === selectedBarber.id);
                     if (!freshBarber || !freshBarber.isActive) {
-                        alert("Este barbeiro encerrou o expediente.");
-                        goHome();
+                        if (!loggedInMode) {
+                            alert("Este barbeiro encerrou o expediente.");
+                            goHome();
+                        }
+                    } else {
+                        // Atualizar dados do barbeiro selecionado
+                        selectedBarber = freshBarber;
+                        // Forçar renderização se estiver na view de fila
+                        if (!document.getElementById('viewQueue').classList.contains('hidden')) {
+                            renderQueue();
+                        }
                     }
                 }
             }, (error) => {
@@ -469,7 +491,7 @@
                 snapshot.forEach(doc => temp.push({ id: doc.id, ...doc.data() }));
                 
                 queueData = temp
-                    .filter(item => item.status !== 'done' && item.status !== 'cancelled')
+                    .filter(item => item.status !== 'done' && item.status !== 'cancelled' && item.status !== 'no-show')
                     .sort((a, b) => a.joinedAt - b.joinedAt);
 
                 checkMyTicketStatus(); // Verify if my ticket is still valid
@@ -808,6 +830,7 @@
             
             const myQueue = queueData.filter(item => item.barberId === selectedBarber.id);
             const activeClient = myQueue.find(item => item.status === 'cutting');
+            const callingClient = myQueue.find(item => item.status === 'calling');
             const waitingClients = myQueue.filter(item => item.status === 'waiting');
 
             document.getElementById('statWaiting').innerText = waitingClients.length;
@@ -822,60 +845,101 @@
 
             // Toggle Form vs Status
             if (!loggedInMode) {
-                if (amInThisQueue) {
+                // Check if user got a no-show
+                const noShowNotice = document.getElementById('noShowNotice');
+                if (myTicket && myTicket.wasNoShow) {
+                    document.getElementById('joinFormContainer').classList.add('hidden');
+                    document.getElementById('activeTicketDisplay').classList.add('hidden');
+                    if (noShowNotice) noShowNotice.classList.remove('hidden');
+                } else if (amInThisQueue) {
                     document.getElementById('joinFormContainer').classList.add('hidden');
                     document.getElementById('activeTicketDisplay').classList.remove('hidden');
+                    if (noShowNotice) noShowNotice.classList.add('hidden');
                     // Find position
                     const myPos = waitingClients.findIndex(c => c.id === myTicket.id) + 1;
                     document.getElementById('myPositionDisplay').innerText = myPos + "º";
                 } else {
                     document.getElementById('joinFormContainer').classList.remove('hidden');
                     document.getElementById('activeTicketDisplay').classList.add('hidden');
+                    if (noShowNotice) noShowNotice.classList.add('hidden');
                 }
             }
 
             if (activeClient) {
                 activeContainer.classList.remove('hidden');
-                document.getElementById('activeClientName').innerText = activeClient.name;
-                
-                const controls = activeContainer.querySelectorAll('.barber-controls');
-                controls.forEach(c => {
-                    if (loggedInMode === 'admin' || (loggedInMode === 'barber' && loggedInBarberId === selectedBarber.id)) {
-                        c.classList.remove('hidden');
-                    } else {
-                        c.classList.add('hidden');
-                    }
-                });
-                
-                window.finishCut = async () => {
-                    try {
-                        await updateDoc(getDocRef(QUEUE_COL, activeClient.id), { 
-                            status: 'done',
-                            completedAt: Date.now()
-                        });
-                    } catch(e) { console.error(e); }
-                };
+                const contentDiv = document.getElementById('activeCutContent');
+                contentDiv.className = 'bg-gradient-to-r from-emerald-900/40 to-slate-800 border border-emerald-500/30 rounded-2xl p-6 flex items-center justify-between shadow-lg relative overflow-hidden';
+                contentDiv.innerHTML = `
+                    <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-emerald-500 blur-3xl opacity-20 rounded-full"></div>
+                    <div class="flex items-center gap-6 relative z-10">
+                        <div class="bg-emerald-500/20 p-4 rounded-full text-emerald-400 animate-pulse">
+                            <i class="fa-solid fa-chair text-3xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-emerald-400 font-bold text-sm uppercase tracking-widest mb-1">Cortando Agora</p>
+                            <h3 class="text-3xl md:text-4xl font-bold text-white">${activeClient.name}</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3 ${loggedInMode === 'admin' || (loggedInMode === 'barber' && loggedInBarberId === selectedBarber.id) ? '' : 'hidden'}">
+                        <button onclick="openPauseModal()" class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex flex-col items-center">
+                            <i class="fa-solid fa-pause text-xl mb-1"></i>
+                            <span class="text-xs">Pausar</span>
+                        </button>
+                        <button onclick="finishCut('${activeClient.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex flex-col items-center">
+                            <i class="fa-solid fa-check text-xl mb-1"></i>
+                            <span class="text-xs">Finalizar</span>
+                        </button>
+                    </div>
+                `;
+            } else if (callingClient) {
+                activeContainer.classList.remove('hidden');
+                const contentDiv = document.getElementById('activeCutContent');
+                contentDiv.className = 'bg-gradient-to-r from-amber-900/40 to-slate-800 border border-amber-500/30 rounded-2xl p-6 flex items-center justify-between shadow-lg relative overflow-hidden';
+                contentDiv.innerHTML = `
+                    <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-amber-500 blur-3xl opacity-20 rounded-full"></div>
+                    <div class="flex items-center gap-6 relative z-10">
+                        <div class="bg-amber-500/20 p-4 rounded-full text-amber-400 animate-pulse">
+                            <i class="fa-solid fa-chair text-3xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-amber-400 font-bold text-sm uppercase tracking-widest mb-1">Chamando</p>
+                            <h3 class="text-3xl md:text-4xl font-bold text-white">${callingClient.name}</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-3 ${loggedInMode === 'admin' || (loggedInMode === 'barber' && loggedInBarberId === selectedBarber.id) ? '' : 'hidden'}">
+                        <button onclick="clientArrived('${callingClient.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex items-center gap-2">
+                            <i class="fa-solid fa-check text-xl"></i>
+                            <span>CHEGOU</span>
+                        </button>
+                        <button onclick="clientNoShow('${callingClient.id}')" class="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex items-center gap-2">
+                            <i class="fa-solid fa-xmark text-xl"></i>
+                            <span>NÃO CHEGOU</span>
+                        </button>
+                    </div>
+                `;
             } else if (selectedBarber.isPaused && (loggedInMode === 'barber' && loggedInBarberId === selectedBarber.id)) {
                 // Show pause status and resume button
                 activeContainer.classList.remove('hidden');
-                activeContainer.innerHTML = `
-                    <div class="bg-gradient-to-r from-orange-900/40 to-slate-800 border border-orange-500/30 rounded-2xl p-6 flex items-center justify-between shadow-lg relative overflow-hidden">
-                        <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-orange-500 blur-3xl opacity-20 rounded-full"></div>
-                        <div class="flex items-center gap-6 relative z-10">
-                            <div class="bg-orange-500/20 p-4 rounded-full text-orange-400 animate-pulse">
-                                <i class="fa-solid fa-pause text-3xl"></i>
-                            </div>
-                            <div>
-                                <p class="text-orange-400 font-bold text-sm uppercase tracking-widest mb-1">Você está em pausa</p>
-                                <h3 class="text-2xl md:text-3xl font-bold text-white">Clique para retomar</h3>
-                            </div>
+                const contentDiv = document.getElementById('activeCutContent');
+                contentDiv.className = 'bg-gradient-to-r from-orange-900/40 to-slate-800 border border-orange-500/30 rounded-2xl p-6 flex items-center justify-between shadow-lg relative overflow-hidden';
+                contentDiv.innerHTML = `
+                    <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-orange-500 blur-3xl opacity-20 rounded-full"></div>
+                    <div class="flex items-center gap-6 relative z-10">
+                        <div class="bg-orange-500/20 p-4 rounded-full text-orange-400 animate-pulse">
+                            <i class="fa-solid fa-pause text-3xl"></i>
                         </div>
-                        
-                        <button onclick="resumeBarber()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex flex-col items-center">
-                            <i class="fa-solid fa-play text-xl mb-1"></i>
-                            <span class="text-xs">Retomar</span>
-                        </button>
+                        <div>
+                            <p class="text-orange-400 font-bold text-sm uppercase tracking-widest mb-1">Você está em pausa</p>
+                            <h3 class="text-2xl md:text-3xl font-bold text-white">Clique para retomar</h3>
+                        </div>
                     </div>
+                    
+                    <button onclick="resumeBarber()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex flex-col items-center">
+                        <i class="fa-solid fa-play text-xl mb-1"></i>
+                        <span class="text-xs">Retomar</span>
+                    </button>
                 `;
             } else {
                 activeContainer.classList.add('hidden');
@@ -913,7 +977,9 @@
                         </div>
                         ${showControls ? `
                         <div class="flex gap-2 ml-4">
-                            <button onclick="callClient('${client.id}')" class="bg-amber-500 hover:bg-amber-600 text-white p-3 rounded-lg shadow"><i class="fa-solid fa-bell"></i></button>
+                            <button onclick="callClient('${client.id}')" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-3 rounded-lg shadow font-bold flex items-center gap-2">
+                                <span>CHAMAR</span>
+                            </button>
                             <button onclick="removeClient('${client.id}')" class="bg-slate-700 hover:bg-red-500/80 text-white p-3 rounded-lg"><i class="fa-solid fa-trash"></i></button>
                         </div>` : ''}
                     `;
@@ -924,8 +990,49 @@
 
         // Global Actions
         window.callClient = async (id) => {
-            if(confirm("Chamar cliente?")) updateStatus(id, 'cutting');
+            // Change to 'calling' status instead of 'cutting'
+            try {
+                await updateDoc(getDocRef(QUEUE_COL, id), { status: 'calling' });
+            } catch(e) { console.error(e); }
         };
+        
+        window.clientArrived = async (id) => {
+            // Client arrived, change to cutting
+            try {
+                await updateDoc(getDocRef(QUEUE_COL, id), { status: 'cutting' });
+            } catch(e) { console.error(e); }
+        };
+        
+        window.clientNoShow = async (id) => {
+            // Client didn't show up, mark as no-show
+            try {
+                await updateDoc(getDocRef(QUEUE_COL, id), { status: 'no-show' });
+                
+                // If this is my ticket, mark it
+                if (myTicket && myTicket.id === id) {
+                    myTicket.wasNoShow = true;
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(myTicket));
+                }
+            } catch(e) { console.error(e); }
+        };
+        
+        window.clearNoShowAndRejoin = () => {
+            // Clear the no-show flag and show form again
+            if (myTicket) {
+                myTicket.wasNoShow = false;
+                clearMyTicket();
+            }
+        };
+        
+        window.finishCut = async (id) => {
+            try {
+                await updateDoc(getDocRef(QUEUE_COL, id), { 
+                    status: 'done',
+                    completedAt: Date.now()
+                });
+            } catch(e) { console.error(e); }
+        };
+        
         window.removeClient = async (id) => {
             if(confirm("Remover da fila?")) updateStatus(id, 'cancelled');
         };
@@ -971,7 +1078,8 @@
                     pauseReason: null,
                     pausedAt: null
                 });
-                renderQueue();
+                closePauseModal(); // Fechar modal caso esteja aberto
+                // Renderização será acionada pelo listener automático
             } catch (e) {
                 console.error("Erro ao retomar:", e);
             }
