@@ -11,6 +11,9 @@
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 
@@ -183,6 +186,10 @@
                         </div>
                         
                         <div class="barber-controls hidden flex gap-3">
+                            <button onclick="openPauseModal()" class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex flex-col items-center">
+                                <i class="fa-solid fa-pause text-xl mb-1"></i>
+                                <span class="text-xs">Pausar</span>
+                            </button>
                             <button onclick="finishCut()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex flex-col items-center">
                                 <i class="fa-solid fa-check text-xl mb-1"></i>
                                 <span class="text-xs">Finalizar</span>
@@ -203,28 +210,73 @@
 
         <!-- VIEW 3: ADMIN PANEL -->
         <div id="viewAdmin" class="absolute inset-0 z-40 bg-slate-900 p-6 md:p-12 overflow-y-auto hidden">
-            <div class="max-w-4xl mx-auto">
+            <div class="max-w-7xl mx-auto">
                 <div class="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
                     <h2 class="text-3xl font-bold text-white"><i class="fa-solid fa-users-gear mr-2 text-amber-500"></i>Gestão de Barbeiros</h2>
                     <button onclick="logout()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-times text-xl"></i> Fechar</button>
                 </div>
 
-                <!-- Add New Barber -->
-                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-8">
-                    <h3 class="text-lg font-bold text-white mb-4">Adicionar Novo Profissional</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <input type="text" id="newBarberName" placeholder="Nome (Ex: Carlos)" class="bg-slate-900 border border-slate-600 rounded-lg p-3 text-white">
-                        <input type="text" id="newBarberPin" placeholder="PIN de Acesso (Ex: 1234)" class="bg-slate-900 border border-slate-600 rounded-lg p-3 text-white">
-                        <button onclick="addBarber()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg p-3">
-                            <i class="fa-solid fa-plus mr-1"></i> Adicionar
-                        </button>
+                <!-- Tabs Navigation -->
+                <div class="flex gap-4 mb-8 border-b border-slate-700 pb-4">
+                    <button onclick="switchAdminTab('gestao')" id="tab-gestao" class="px-4 py-2 font-bold text-white bg-amber-600 rounded-t-lg tab-btn">
+                        <i class="fa-solid fa-users-gear mr-2"></i> Gestão
+                    </button>
+                    <button onclick="switchAdminTab('dashboard')" id="tab-dashboard" class="px-4 py-2 font-bold text-slate-400 hover:text-white rounded-t-lg tab-btn">
+                        <i class="fa-solid fa-chart-line mr-2"></i> Dashboard
+                    </button>
+                </div>
+
+                <!-- TAB 1: Gestão de Barbeiros -->
+                <div id="tab-content-gestao" class="tab-content">
+                    <!-- Add New Barber -->
+                    <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-8">
+                        <h3 class="text-lg font-bold text-white mb-4">Adicionar Novo Profissional</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <input type="text" id="newBarberName" placeholder="Nome (Ex: Carlos)" class="bg-slate-900 border border-slate-600 rounded-lg p-3 text-white">
+                            <input type="text" id="newBarberPin" placeholder="PIN de Acesso (Ex: 1234)" class="bg-slate-900 border border-slate-600 rounded-lg p-3 text-white">
+                            <button onclick="addBarber()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg p-3">
+                                <i class="fa-solid fa-plus mr-1"></i> Adicionar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- List Barbers -->
+                    <h3 class="text-lg font-bold text-white mb-4">Equipe Cadastrada</h3>
+                    <div id="adminBarberList" class="space-y-3">
+                        <!-- Injected via JS -->
                     </div>
                 </div>
 
-                <!-- List Barbers -->
-                <h3 class="text-lg font-bold text-white mb-4">Equipe Cadastrada</h3>
-                <div id="adminBarberList" class="space-y-3">
-                    <!-- Injected via JS -->
+                <!-- TAB 2: Dashboard de Estatísticas -->
+                <div id="tab-content-dashboard" class="tab-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                        <!-- Gráfico 1: Cortes Concluídos -->
+                        <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                                Cortes Concluídos
+                            </h3>
+                            <canvas id="chartCompletedCuts"></canvas>
+                        </div>
+
+                        <!-- Gráfico 2: Faltas -->
+                        <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-calendar-xmark text-red-400"></i>
+                                Faltas por Barbeiro
+                            </h3>
+                            <canvas id="chartNoShows"></canvas>
+                        </div>
+
+                        <!-- Gráfico 3: Tempo Médio -->
+                        <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-hourglass-end text-blue-400"></i>
+                                Tempo Médio (min)
+                            </h3>
+                            <canvas id="chartAvgTime"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -254,6 +306,35 @@
                 <button onclick="closeModal('modalFinalWarning')" class="flex-1 py-3 rounded-lg bg-slate-700 text-white hover:bg-slate-600 font-medium">Não, quero ficar</button>
                 <button onclick="confirmSwitchBarber()" class="flex-1 py-3 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500">Sim, sair da fila</button>
             </div>
+        </div>
+    </div>
+
+    <!-- PAUSE MODAL (Barber) -->
+    <div id="pauseModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center z-50 fade-in">
+        <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-sm">
+            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-pause text-amber-500"></i>
+                Pausar Atendimento
+            </h3>
+            <p class="text-slate-400 text-sm mb-6">Selecione o motivo da pausa:</p>
+            <div class="space-y-3 mb-6">
+                <button onclick="setPauseReason('almoco')" class="w-full text-left bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg transition border border-slate-600">
+                    <i class="fa-solid fa-utensils mr-2 text-amber-500"></i> Almoço
+                </button>
+                <button onclick="setPauseReason('lanche')" class="w-full text-left bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg transition border border-slate-600">
+                    <i class="fa-solid fa-coffee mr-2 text-amber-500"></i> Lanche
+                </button>
+                <button onclick="setPauseReason('banheiro')" class="w-full text-left bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg transition border border-slate-600">
+                    <i class="fa-solid fa-restroom mr-2 text-amber-500"></i> Banheiro
+                </button>
+                <button onclick="setPauseReason('saida')" class="w-full text-left bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg transition border border-slate-600">
+                    <i class="fa-solid fa-door-open mr-2 text-amber-500"></i> Saída do Salão
+                </button>
+                <button onclick="setPauseReason('outros')" class="w-full text-left bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-lg transition border border-slate-600">
+                    <i class="fa-solid fa-ellipsis mr-2 text-amber-500"></i> Outros
+                </button>
+            </div>
+            <button onclick="closePauseModal()" class="w-full py-3 rounded-lg bg-slate-700 text-white hover:bg-slate-600 font-medium">Cancelar</button>
         </div>
     </div>
 
@@ -692,6 +773,9 @@
 
                 // Check if this is the barber I'm queued for to add visual indicator
                 const isMyBarber = myTicket && myTicket.barberId === b.id;
+                
+                // Check if barber is on pause
+                const isPaused = b.isPaused === true;
 
                 const card = document.createElement('div');
                 card.onclick = () => selectBarber(b.id);
@@ -699,9 +783,10 @@
                 
                 card.innerHTML = `
                     ${isMyBarber ? '<div class="absolute top-0 right-0 bg-amber-500 text-white text-[10px] uppercase font-bold px-2 py-1 rounded-bl-lg">Sua Fila</div>' : ''}
+                    ${isPaused ? '<div class="absolute top-0 left-0 bg-orange-500 text-white text-[10px] uppercase font-bold px-2 py-1 rounded-br-lg flex items-center gap-1"><i class="fa-solid fa-pause"></i> Pausa</div>' : ''}
                     <div class="flex justify-between items-start mb-4">
-                        <div class="bg-slate-700 p-3 rounded-full ${isMyBarber ? 'text-amber-500 bg-amber-500/20' : 'text-amber-500 group-hover:bg-amber-500 group-hover:text-white'} transition">
-                            <i class="fa-solid fa-user-tie text-2xl"></i>
+                        <div class="bg-slate-700 p-3 rounded-full ${isPaused ? 'text-orange-400 bg-orange-500/20' : isMyBarber ? 'text-amber-500 bg-amber-500/20' : 'text-amber-500 group-hover:bg-amber-500 group-hover:text-white'} transition">
+                            <i class="fa-solid ${isPaused ? 'fa-pause' : 'fa-user-tie'} text-2xl"></i>
                         </div>
                         <div class="text-right">
                             <span class="block text-2xl font-bold text-white">${count}</span>
@@ -709,7 +794,7 @@
                         </div>
                     </div>
                     <h3 class="text-xl font-bold text-white mb-1">${b.name}</h3>
-                    <p class="text-emerald-400 text-sm font-medium"><i class="fa-regular fa-clock mr-1"></i> ~${time} min espera</p>
+                    ${isPaused ? '<p class="text-orange-400 text-sm font-medium"><i class="fa-solid fa-pause mr-1"></i> Em Pausa</p>' : '<p class="text-emerald-400 text-sm font-medium"><i class="fa-regular fa-clock mr-1"></i> ~${time} min espera</p>'}
                 `;
                 grid.appendChild(card);
             });
@@ -762,7 +847,36 @@
                     }
                 });
                 
-                window.finishCut = async () => updateStatus(activeClient.id, 'done');
+                window.finishCut = async () => {
+                    try {
+                        await updateDoc(getDocRef(QUEUE_COL, activeClient.id), { 
+                            status: 'done',
+                            completedAt: Date.now()
+                        });
+                    } catch(e) { console.error(e); }
+                };
+            } else if (selectedBarber.isPaused && (loggedInMode === 'barber' && loggedInBarberId === selectedBarber.id)) {
+                // Show pause status and resume button
+                activeContainer.classList.remove('hidden');
+                activeContainer.innerHTML = `
+                    <div class="bg-gradient-to-r from-orange-900/40 to-slate-800 border border-orange-500/30 rounded-2xl p-6 flex items-center justify-between shadow-lg relative overflow-hidden">
+                        <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-orange-500 blur-3xl opacity-20 rounded-full"></div>
+                        <div class="flex items-center gap-6 relative z-10">
+                            <div class="bg-orange-500/20 p-4 rounded-full text-orange-400 animate-pulse">
+                                <i class="fa-solid fa-pause text-3xl"></i>
+                            </div>
+                            <div>
+                                <p class="text-orange-400 font-bold text-sm uppercase tracking-widest mb-1">Você está em pausa</p>
+                                <h3 class="text-2xl md:text-3xl font-bold text-white">Clique para retomar</h3>
+                            </div>
+                        </div>
+                        
+                        <button onclick="resumeBarber()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition flex flex-col items-center">
+                            <i class="fa-solid fa-play text-xl mb-1"></i>
+                            <span class="text-xs">Retomar</span>
+                        </button>
+                    </div>
+                `;
             } else {
                 activeContainer.classList.add('hidden');
             }
@@ -819,6 +933,233 @@
         async function updateStatus(docId, newStatus) {
             try { await updateDoc(getDocRef(QUEUE_COL, docId), { status: newStatus }); }
             catch(e) { console.error(e); }
+        }
+
+        // --- PAUSE SYSTEM ---
+        window.openPauseModal = () => {
+            if (loggedInMode === 'barber') {
+                document.getElementById('pauseModal').classList.remove('hidden');
+            }
+        };
+
+        window.closePauseModal = () => {
+            document.getElementById('pauseModal').classList.add('hidden');
+        };
+
+        window.setPauseReason = async (reason) => {
+            if (!loggedInBarberId) return;
+            
+            try {
+                await updateDoc(getDocRef(BARBERS_COL, loggedInBarberId), {
+                    isPaused: true,
+                    pauseReason: reason,
+                    pausedAt: Date.now()
+                });
+                closePauseModal();
+                renderQueue();
+            } catch (e) {
+                console.error("Erro ao pausar:", e);
+            }
+        };
+
+        window.resumeBarber = async () => {
+            if (!loggedInBarberId) return;
+            
+            try {
+                await updateDoc(getDocRef(BARBERS_COL, loggedInBarberId), {
+                    isPaused: false,
+                    pauseReason: null,
+                    pausedAt: null
+                });
+                renderQueue();
+            } catch (e) {
+                console.error("Erro ao retomar:", e);
+            }
+        };
+
+        // --- ADMIN DASHBOARD FUNCTIONS ---
+        let chartsInstances = {};
+
+        window.switchAdminTab = (tab) => {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('bg-amber-600', 'text-white');
+                b.classList.add('text-slate-400', 'hover:text-white');
+            });
+            
+            // Show selected tab
+            document.getElementById('tab-content-' + tab).classList.remove('hidden');
+            document.getElementById('tab-' + tab).classList.add('bg-amber-600', 'text-white');
+            document.getElementById('tab-' + tab).classList.remove('text-slate-400', 'hover:text-white');
+            
+            // Load charts if dashboard
+            if (tab === 'dashboard') {
+                setTimeout(() => initDashboardCharts(), 100);
+            }
+        };
+
+        function initDashboardCharts() {
+            // Collect data from queueData
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayMs = today.getTime();
+
+            // Filter today's completed cuts
+            const completedToday = queueData.filter(q => q.status === 'done' && q.completedAt && q.completedAt >= todayMs);
+            
+            // Group by barber for completed cuts
+            const completedByBarber = {};
+            completedToday.forEach(q => {
+                if (!completedByBarber[q.barberId]) completedByBarber[q.barberId] = 0;
+                completedByBarber[q.barberId]++;
+            });
+
+            // Calculate no-shows (cancelled on waiting)
+            const noShowsToday = queueData.filter(q => q.status === 'cancelled' && q.joinedAt >= todayMs && q.status !== 'done');
+            const noShowsByBarber = {};
+            noShowsToday.forEach(q => {
+                if (!noShowsByBarber[q.barberId]) noShowsByBarber[q.barberId] = 0;
+                noShowsByBarber[q.barberId]++;
+            });
+
+            // Calculate average time between finishes
+            const avgTimeByBarber = {};
+            barbersData.forEach(barber => {
+                const barberCompletedToday = completedToday.filter(q => q.barberId === barber.id).sort((a, b) => a.completedAt - b.completedAt);
+                
+                if (barberCompletedToday.length > 1) {
+                    let totalTime = 0;
+                    for (let i = 1; i < barberCompletedToday.length; i++) {
+                        const timeDiff = (barberCompletedToday[i].completedAt - barberCompletedToday[i-1].completedAt) / 60000; // Convert to minutes
+                        totalTime += timeDiff;
+                    }
+                    avgTimeByBarber[barber.id] = Math.round(totalTime / (barberCompletedToday.length - 1));
+                } else if (barberCompletedToday.length === 1) {
+                    avgTimeByBarber[barber.id] = 20; // Default estimate
+                } else {
+                    avgTimeByBarber[barber.id] = 0;
+                }
+            });
+
+            const barberLabels = barbersData.map(b => b.name);
+            const completedData = barbersData.map(b => completedByBarber[b.id] || 0);
+            const noShowsData = barbersData.map(b => noShowsByBarber[b.id] || 0);
+            const avgTimeData = barbersData.map(b => avgTimeByBarber[b.id] || 0);
+
+            // Chart 1: Completed Cuts
+            const ctx1 = document.getElementById('chartCompletedCuts');
+            if (ctx1) {
+                if (chartsInstances.completedCuts) chartsInstances.completedCuts.destroy();
+                chartsInstances.completedCuts = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels: barberLabels,
+                        datasets: [{
+                            label: 'Cortes Concluídos Hoje',
+                            data: completedData,
+                            backgroundColor: '#10b981',
+                            borderColor: '#059669',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { labels: { color: '#e2e8f0' } }
+                        },
+                        scales: {
+                            y: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#475569' }
+                            },
+                            x: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#475569' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Chart 2: No-Shows
+            const ctx2 = document.getElementById('chartNoShows');
+            if (ctx2) {
+                if (chartsInstances.noShows) chartsInstances.noShows.destroy();
+                chartsInstances.noShows = new Chart(ctx2, {
+                    type: 'bar',
+                    data: {
+                        labels: barberLabels,
+                        datasets: [{
+                            label: 'Faltas Hoje',
+                            data: noShowsData,
+                            backgroundColor: '#ef4444',
+                            borderColor: '#dc2626',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { labels: { color: '#e2e8f0' } }
+                        },
+                        scales: {
+                            y: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#475569' }
+                            },
+                            x: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#475569' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Chart 3: Average Time
+            const ctx3 = document.getElementById('chartAvgTime');
+            if (ctx3) {
+                if (chartsInstances.avgTime) chartsInstances.avgTime.destroy();
+                chartsInstances.avgTime = new Chart(ctx3, {
+                    type: 'line',
+                    data: {
+                        labels: barberLabels,
+                        datasets: [{
+                            label: 'Tempo Médio (minutos)',
+                            data: avgTimeData,
+                            borderColor: '#3b82f6',
+                            backgroundColor: '#3b82f630',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#3b82f6',
+                            pointBorderColor: '#1e40af',
+                            pointBorderWidth: 2,
+                            pointRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { labels: { color: '#e2e8f0' } }
+                        },
+                        scales: {
+                            y: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#475569' }
+                            },
+                            x: {
+                                ticks: { color: '#94a3b8' },
+                                grid: { color: '#475569' }
+                            }
+                        }
+                    }
+                });
+            }
         }
 
         // Init
