@@ -352,21 +352,53 @@
 
     <!-- Login Modal -->
     <div id="loginModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden items-center justify-center z-50 fade-in">
-        <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-xs text-center">
+        <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-md text-center">
             <i class="fa-solid fa-lock text-amber-500 text-3xl mb-4"></i>
             <h3 class="text-xl font-bold text-white mb-2">Acesso Restrito</h3>
-            <p class="text-slate-400 text-sm mb-6">Digite seu PIN ou a Senha Mestra</p>
-            <input type="password" id="pinInput" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center text-2xl tracking-widest mb-4 focus:border-amber-500 focus:outline-none">
-            <div class="flex gap-2">
-                <button onclick="closeLoginModal()" class="flex-1 py-3 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600">Voltar</button>
-                <button onclick="processLogin()" class="flex-1 py-3 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-500">Entrar</button>
+            <p class="text-slate-400 text-sm mb-6">Escolha como deseja entrar</p>
+            
+            <!-- Login com Google -->
+            <button onclick="loginWithGoogle()" class="w-full bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 rounded-lg mb-3 flex items-center justify-center gap-3 transition">
+                <i class="fa-brands fa-google text-xl"></i>
+                Continuar com Google
+            </button>
+            
+            <!-- Divisor -->
+            <div class="flex items-center gap-3 my-4">
+                <div class="flex-1 h-px bg-slate-600"></div>
+                <span class="text-slate-500 text-xs">OU</span>
+                <div class="flex-1 h-px bg-slate-600"></div>
             </div>
+            
+            <!-- Login com Email -->
+            <div id="emailLoginForm" class="mb-4 space-y-3">
+                <input type="email" id="emailInput" placeholder="Seu email" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-500 focus:outline-none">
+                <input type="password" id="passwordInput" placeholder="Sua senha" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-500 focus:outline-none">
+                <div class="flex gap-2">
+                    <button onclick="loginWithEmail()" class="flex-1 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500">Entrar</button>
+                    <button onclick="registerWithEmail()" class="flex-1 py-3 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500">Cadastrar</button>
+                </div>
+            </div>
+            
+            <!-- Divisor -->
+            <div class="flex items-center gap-3 my-4">
+                <div class="flex-1 h-px bg-slate-600"></div>
+                <span class="text-slate-500 text-xs">BARBEIROS</span>
+                <div class="flex-1 h-px bg-slate-600"></div>
+            </div>
+            
+            <!-- Login com PIN (para barbeiros) -->
+            <p class="text-slate-400 text-xs mb-2">Acesso de Barbeiro/Admin (PIN)</p>
+            <input type="password" id="pinInput" placeholder="Digite o PIN" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center text-2xl tracking-widest mb-4 focus:border-amber-500 focus:outline-none">
+            <button onclick="processLogin()" class="w-full py-3 rounded-lg bg-amber-600 text-white font-bold hover:bg-amber-500 mb-3">Entrar com PIN</button>
+            
+            <button onclick="closeLoginModal()" class="w-full py-3 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600">Voltar</button>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- CONFIG ---
@@ -657,11 +689,94 @@
         window.openLoginModal = () => {
             document.getElementById('loginModal').classList.remove('hidden');
             document.getElementById('pinInput').value = '';
-            document.getElementById('pinInput').focus();
+            document.getElementById('emailInput').value = '';
+            document.getElementById('passwordInput').value = '';
         };
 
         window.closeLoginModal = () => {
             document.getElementById('loginModal').classList.add('hidden');
+        };
+        
+        // Login com Google
+        window.loginWithGoogle = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+                closeLoginModal();
+                alert('Login realizado com sucesso!');
+            } catch (error) {
+                console.error('Erro no login com Google:', error);
+                if (error.code === 'auth/popup-closed-by-user') {
+                    alert('Login cancelado.');
+                } else if (error.code === 'auth/operation-not-allowed') {
+                    alert('⚠️ Login com Google não está ativado no Firebase.\n\nVá em Authentication > Sign-in method > Google e ative.');
+                } else {
+                    alert('Erro ao fazer login com Google: ' + error.message);
+                }
+            }
+        };
+        
+        // Login com Email
+        window.loginWithEmail = async () => {
+            const email = document.getElementById('emailInput').value.trim();
+            const password = document.getElementById('passwordInput').value;
+            
+            if (!email || !password) {
+                alert('Preencha email e senha');
+                return;
+            }
+            
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                closeLoginModal();
+                alert('Login realizado com sucesso!');
+            } catch (error) {
+                console.error('Erro no login com email:', error);
+                if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+                    alert('Email ou senha incorretos.');
+                } else if (error.code === 'auth/invalid-email') {
+                    alert('Email inválido.');
+                } else if (error.code === 'auth/operation-not-allowed') {
+                    alert('⚠️ Login com Email/Senha não está ativado no Firebase.\n\nVá em Authentication > Sign-in method > Email/Password e ative.');
+                } else {
+                    alert('Erro ao fazer login: ' + error.message);
+                }
+            }
+        };
+        
+        // Cadastro com Email
+        window.registerWithEmail = async () => {
+            const email = document.getElementById('emailInput').value.trim();
+            const password = document.getElementById('passwordInput').value;
+            
+            if (!email || !password) {
+                alert('Preencha email e senha');
+                return;
+            }
+            
+            if (password.length < 6) {
+                alert('A senha deve ter pelo menos 6 caracteres.');
+                return;
+            }
+            
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                closeLoginModal();
+                alert('Cadastro realizado com sucesso!');
+            } catch (error) {
+                console.error('Erro no cadastro:', error);
+                if (error.code === 'auth/email-already-in-use') {
+                    alert('Este email já está cadastrado. Tente fazer login.');
+                } else if (error.code === 'auth/invalid-email') {
+                    alert('Email inválido.');
+                } else if (error.code === 'auth/weak-password') {
+                    alert('Senha muito fraca. Use pelo menos 6 caracteres.');
+                } else if (error.code === 'auth/operation-not-allowed') {
+                    alert('⚠️ Cadastro com Email/Senha não está ativado no Firebase.\n\nVá em Authentication > Sign-in method > Email/Password e ative.');
+                } else {
+                    alert('Erro ao cadastrar: ' + error.message);
+                }
+            }
         };
 
         window.processLogin = () => {
@@ -840,8 +955,9 @@
             document.getElementById('statAvgDesktop').innerText = time;
 
             // --- USER STATUS LOGIC ---
-            // Determine if user is in THIS queue
-            const amInThisQueue = myTicket && myTicket.barberId === selectedBarber.id && waitingClients.some(c => c.id === myTicket.id);
+            // Determine if user is in THIS queue (any active status)
+            const myActiveTicket = myTicket && myTicket.barberId === selectedBarber.id ? myQueue.find(c => c.id === myTicket.id) : null;
+            const amInThisQueue = myActiveTicket && ['waiting', 'calling', 'cutting'].includes(myActiveTicket.status);
 
             // Toggle Form vs Status
             if (!loggedInMode) {
@@ -855,9 +971,50 @@
                     document.getElementById('joinFormContainer').classList.add('hidden');
                     document.getElementById('activeTicketDisplay').classList.remove('hidden');
                     if (noShowNotice) noShowNotice.classList.add('hidden');
-                    // Find position
-                    const myPos = waitingClients.findIndex(c => c.id === myTicket.id) + 1;
-                    document.getElementById('myPositionDisplay').innerText = myPos + "º";
+                    
+                    // Show different status based on current state
+                    const statusDisplay = document.getElementById('activeTicketDisplay');
+                    if (myActiveTicket.status === 'calling') {
+                        // Cliente está sendo chamado - mostrar em amarelo
+                        statusDisplay.className = 'w-full bg-amber-500/20 border border-amber-500/50 rounded-xl p-6 text-center animate-pulse';
+                        statusDisplay.innerHTML = `
+                            <div class="text-amber-500 text-4xl mb-2"><i class="fa-solid fa-bell-concierge"></i></div>
+                            <h3 class="text-white font-bold text-2xl mb-1">VOCÊ ESTÁ SENDO CHAMADO!</h3>
+                            <p class="text-amber-400 text-lg mb-4 font-bold">Dirija-se à cadeira agora</p>
+                            <div class="bg-slate-900/50 rounded-lg p-3">
+                                <p class="text-amber-500 text-sm">O barbeiro está te aguardando</p>
+                            </div>
+                        `;
+                    } else if (myActiveTicket.status === 'cutting') {
+                        // Cliente está cortando - mostrar em verde
+                        statusDisplay.className = 'w-full bg-emerald-500/20 border border-emerald-500/50 rounded-xl p-6 text-center';
+                        statusDisplay.innerHTML = `
+                            <div class="text-emerald-500 text-4xl mb-2"><i class="fa-solid fa-chair"></i></div>
+                            <h3 class="text-white font-bold text-2xl mb-1">VOCÊ ESTÁ SENDO ATENDIDO</h3>
+                            <p class="text-emerald-400 text-sm mb-4">Seu atendimento está em andamento</p>
+                            <div class="bg-slate-900/50 rounded-lg p-3">
+                                <p class="text-emerald-500 text-sm">Aproveite seu corte!</p>
+                            </div>
+                        `;
+                    } else {
+                        // Cliente está aguardando - mostrar posição
+                        statusDisplay.className = 'w-full bg-amber-500/10 border border-amber-500/30 rounded-xl p-6 text-center';
+                        const myPos = waitingClients.findIndex(c => c.id === myTicket.id) + 1;
+                        statusDisplay.innerHTML = `
+                            <div class="text-amber-500 text-4xl mb-2"><i class="fa-solid fa-ticket-alt"></i></div>
+                            <h3 class="text-white font-bold text-lg mb-1">Você está na fila!</h3>
+                            <p class="text-slate-400 text-sm mb-4">Acompanhe sua posição no painel ao lado.</p>
+                            
+                            <div class="bg-slate-900/50 rounded-lg p-3 mb-4">
+                                <p class="text-xs text-slate-500 uppercase">Sua Posição</p>
+                                <p class="text-2xl font-bold text-white">${myPos}º</p>
+                            </div>
+                            
+                            <button onclick="confirmExitQueue()" class="text-red-400 hover:text-red-300 text-sm underline">
+                                Cancelar minha vez e sair
+                            </button>
+                        `;
+                    }
                 } else {
                     document.getElementById('joinFormContainer').classList.remove('hidden');
                     document.getElementById('activeTicketDisplay').classList.add('hidden');
