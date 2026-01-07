@@ -394,37 +394,7 @@
         <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-md text-center">
             <i class="fa-solid fa-lock text-amber-500 text-3xl mb-4"></i>
             <h3 class="text-xl font-bold text-white mb-2">Acesso Restrito</h3>
-            <p class="text-slate-400 text-sm mb-6">Escolha como deseja entrar</p>
-            
-            <!-- Login com Google -->
-            <button onclick="loginWithGoogle()" class="w-full bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 rounded-lg mb-3 flex items-center justify-center gap-3 transition">
-                <i class="fa-brands fa-google text-xl"></i>
-                Continuar com Google
-            </button>
-            
-            <!-- Divisor -->
-            <div class="flex items-center gap-3 my-4">
-                <div class="flex-1 h-px bg-slate-600"></div>
-                <span class="text-slate-500 text-xs">OU</span>
-                <div class="flex-1 h-px bg-slate-600"></div>
-            </div>
-            
-            <!-- Login com Email -->
-            <div id="emailLoginForm" class="mb-4 space-y-3">
-                <input type="email" id="emailInput" placeholder="Seu email" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-500 focus:outline-none">
-                <input type="password" id="passwordInput" placeholder="Sua senha" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-500 focus:outline-none">
-                <div class="flex gap-2">
-                    <button onclick="loginWithEmail()" class="flex-1 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500">Entrar</button>
-                    <button onclick="registerWithEmail()" class="flex-1 py-3 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500">Cadastrar</button>
-                </div>
-            </div>
-            
-            <!-- Divisor -->
-            <div class="flex items-center gap-3 my-4">
-                <div class="flex-1 h-px bg-slate-600"></div>
-                <span class="text-slate-500 text-xs">BARBEIROS</span>
-                <div class="flex-1 h-px bg-slate-600"></div>
-            </div>
+            <p class="text-slate-400 text-sm mb-6">Digite seu PIN para acessar</p>
             
             <!-- Login com PIN (para barbeiros) -->
             <p class="text-slate-400 text-xs mb-2">Acesso de Barbeiro/Admin (PIN)</p>
@@ -586,6 +556,8 @@
                 startListeners();
                 // Esconder tela de login inicial
                 document.getElementById('initialLoginScreen').classList.add('hidden');
+                // Mostrar tela de seleção explicitamente após login
+                goHome();
                 // Mostrar botão de conta do cliente
                 const clientBtn = document.getElementById('clientLogoutBtn');
                 if (clientBtn) clientBtn.classList.remove('hidden');
@@ -597,13 +569,17 @@
                     emailSpan.innerText = 'Conta';
                 }
             } else {
-                // Sem usuário - mostrar tela de login inicial
-                document.getElementById('initialLoginScreen').classList.remove('hidden');
-                document.getElementById('viewSelection').classList.add('hidden');
-                document.getElementById('viewQueue').classList.add('hidden');
-                document.getElementById('viewAdmin').classList.add('hidden');
-                const clientBtn = document.getElementById('clientLogoutBtn');
-                if (clientBtn) clientBtn.classList.add('hidden');
+                // Sem usuário: mostrar tela de login inicial apenas se não estiver em modo PIN
+                if (loggedInMode === 'barber' || loggedInMode === 'admin') {
+                    document.getElementById('initialLoginScreen').classList.add('hidden');
+                } else {
+                    document.getElementById('initialLoginScreen').classList.remove('hidden');
+                    document.getElementById('viewSelection').classList.add('hidden');
+                    document.getElementById('viewQueue').classList.add('hidden');
+                    document.getElementById('viewAdmin').classList.add('hidden');
+                    const clientBtn = document.getElementById('clientLogoutBtn');
+                    if (clientBtn) clientBtn.classList.add('hidden');
+                }
             }
         });
 
@@ -843,9 +819,8 @@
         // --- ADMIN & BARBER LOGIN (Area Restrita) ---
         window.openLoginModal = () => {
             document.getElementById('loginModal').classList.remove('hidden');
-            document.getElementById('pinInput').value = '';
-            document.getElementById('emailInput').value = '';
-            document.getElementById('passwordInput').value = '';
+            const pinEl = document.getElementById('pinInput');
+            if (pinEl) pinEl.value = '';
         };
 
         window.closeLoginModal = () => {
@@ -945,6 +920,8 @@
                 document.getElementById('adminBtn').classList.add('hidden');
                 document.getElementById('logoutBtn').classList.remove('hidden');
                 document.getElementById('headerContext').innerText = "MODO ADMIN";
+                // Ocultar tela de login inicial ao entrar por PIN
+                document.getElementById('initialLoginScreen').classList.add('hidden');
                 closeLoginModal();
                 renderAdminList();
                 return;
@@ -964,7 +941,8 @@
                 document.getElementById('logoutBtn').classList.remove('hidden');
                 document.getElementById('headerContext').innerText = `Painel: ${barber.name}`;
                 document.getElementById('displayBarberName').innerText = barber.name + " (Você)";
-
+                // Ocultar tela de login inicial ao entrar por PIN
+                document.getElementById('initialLoginScreen').classList.add('hidden');
                 closeLoginModal();
                 renderQueue(); 
                 return;
@@ -987,14 +965,14 @@
                 goHome();
             } else {
                 // Logout completo do Firebase (cliente)
-                if (confirm('Deseja sair da sua conta? Você precisará fazer login novamente.')) {
                     try {
                         await signOut(auth);
                         myTicket = null;
+                        // onAuthStateChanged vai automaticamente mostrar a tela de login
                     } catch (e) {
                         console.error('Erro ao sair:', e);
+                        alert('Erro ao sair da conta. Tente novamente.');
                     }
-                }
             }
         };
 
@@ -1297,7 +1275,7 @@
                             </div>
                             <div>
                                 <h4 class="font-bold text-lg text-white">${client.name} ${isMe ? '<span class="text-xs bg-amber-500 text-white px-1.5 rounded ml-2">VOCÊ</span>' : ''}</h4>
-                                <span class="text-xs text-slate-500"><i class="fa-regular fa-clock"></i> ${new Date(client.joinedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                <span class="text-xs text-slate-500"><i class="fa-regular fa-clock"></i> ${new Date(client.joinedAt).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
                             </div>
                         </div>
                         ${showControls ? `
@@ -1432,6 +1410,10 @@
         };
 
         function initDashboardCharts() {
+            // Garantir locale pt-BR para formatações internas do Chart
+            if (window.Chart && Chart.defaults) {
+                Chart.defaults.locale = 'pt-BR';
+            }
             // Collect data from queueData
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -1499,7 +1481,16 @@
                         responsive: true,
                         maintainAspectRatio: true,
                         plugins: {
-                            legend: { labels: { color: '#e2e8f0' } }
+                            legend: { labels: { color: '#e2e8f0' } },
+                            tooltip: {
+                                callbacks: {
+                                    title: (items) => items[0]?.label || '',
+                                    label: (context) => {
+                                        const v = context.parsed?.y ?? context.parsed ?? context.raw;
+                                        return `Cortes: ${v}`;
+                                    }
+                                }
+                            }
                         },
                         scales: {
                             y: {
@@ -1535,7 +1526,16 @@
                         responsive: true,
                         maintainAspectRatio: true,
                         plugins: {
-                            legend: { labels: { color: '#e2e8f0' } }
+                            legend: { labels: { color: '#e2e8f0' } },
+                            tooltip: {
+                                callbacks: {
+                                    title: (items) => items[0]?.label || '',
+                                    label: (context) => {
+                                        const v = context.parsed?.y ?? context.parsed ?? context.raw;
+                                        return `Faltas: ${v}`;
+                                    }
+                                }
+                            }
                         },
                         scales: {
                             y: {
@@ -1577,7 +1577,16 @@
                         responsive: true,
                         maintainAspectRatio: true,
                         plugins: {
-                            legend: { labels: { color: '#e2e8f0' } }
+                            legend: { labels: { color: '#e2e8f0' } },
+                            tooltip: {
+                                callbacks: {
+                                    title: (items) => items[0]?.label || '',
+                                    label: (context) => {
+                                        const v = context.parsed?.y ?? context.parsed ?? context.raw;
+                                        return `Tempo: ${v} min`;
+                                    }
+                                }
+                            }
                         },
                         scales: {
                             y: {
