@@ -482,6 +482,79 @@
         let myTicket = null; // Stores { id, barberId, name } if user is in queue
         let pendingBarberSwitch = null; // Stores target barber ID during confirmation
 
+        // --- CLIENT LOGIN FUNCTIONS (Must be global for onclick handlers) ---
+        window.clientLoginWithGoogle = async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+                // onAuthStateChanged vai lidar com a navegação
+            } catch (error) {
+                console.error('Erro no login com Google:', error);
+                if (error.code === 'auth/popup-closed-by-user') {
+                    alert('Login cancelado.');
+                } else if (error.code === 'auth/operation-not-allowed') {
+                    alert('⚠️ Login com Google não está ativado no Firebase.\n\nVá em Authentication > Sign-in method > Google e ative.');
+                } else {
+                    alert('Erro ao fazer login com Google: ' + error.message);
+                }
+            }
+        };
+        
+        window.clientLoginWithEmail = async () => {
+            const email = document.getElementById('clientEmailInput').value.trim();
+            const password = document.getElementById('clientPasswordInput').value;
+            
+            if (!email || !password) {
+                alert('Preencha email e senha');
+                return;
+            }
+            
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                // onAuthStateChanged vai lidar com a navegação
+            } catch (error) {
+                console.error('Erro no login:', error);
+                if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+                    alert('Email ou senha incorretos.');
+                } else if (error.code === 'auth/invalid-email') {
+                    alert('Email inválido.');
+                } else {
+                    alert('Erro ao fazer login: ' + error.message);
+                }
+            }
+        };
+        
+        window.clientRegisterWithEmail = async () => {
+            const email = document.getElementById('clientEmailInput').value.trim();
+            const password = document.getElementById('clientPasswordInput').value;
+            
+            if (!email || !password) {
+                alert('Preencha email e senha');
+                return;
+            }
+            
+            if (password.length < 6) {
+                alert('A senha deve ter pelo menos 6 caracteres.');
+                return;
+            }
+            
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                // onAuthStateChanged vai lidar com a navegação
+            } catch (error) {
+                console.error('Erro no cadastro:', error);
+                if (error.code === 'auth/email-already-in-use') {
+                    alert('Este email já está cadastrado. Tente fazer login.');
+                } else if (error.code === 'auth/invalid-email') {
+                    alert('Email inválido.');
+                } else if (error.code === 'auth/weak-password') {
+                    alert('Senha muito fraca. Use pelo menos 6 caracteres.');
+                } else {
+                    alert('Erro ao cadastrar: ' + error.message);
+                }
+            }
+        };
+
         // Helper Functions for Paths
         function getCollection(colName) {
             if (useInternalPath) return collection(db, 'artifacts', appId, 'public', 'data', colName);
@@ -610,35 +683,6 @@
                 if (selectedBarber) renderQueue();
                 renderBarberGrid(); 
             });
-        }
-
-        // --- TICKET VALIDATION ---
-        async function loadUserTicket() {
-            if (!currentUser) return;
-            
-            // Buscar ticket ativo do usuário pelo UID
-            try {
-                const q = query(
-                    getCollection(QUEUE_COL),
-                    where('userId', '==', currentUser.uid),
-                    where('status', 'in', ['waiting', 'calling', 'cutting'])
-                );
-                const snapshot = await getDocs(q);
-                
-                if (!snapshot.empty) {
-                    const ticketDoc = snapshot.docs[0];
-                    myTicket = {
-                        id: ticketDoc.id,
-                        barberId: ticketDoc.data().barberId,
-                        name: ticketDoc.data().name,
-                        userId: currentUser.uid
-                    };
-                } else {
-                    myTicket = null;
-                }
-            } catch (e) {
-                console.error('Erro ao carregar ticket:', e);
-            }
         }
         
         function checkMyTicketStatus() {
@@ -796,79 +840,6 @@
             }
         };
 
-        // --- CLIENT LOGIN (Initial Screen) ---
-        window.clientLoginWithGoogle = async () => {
-            const provider = new GoogleAuthProvider();
-            try {
-                await signInWithPopup(auth, provider);
-                // onAuthStateChanged vai lidar com a navegação
-            } catch (error) {
-                console.error('Erro no login com Google:', error);
-                if (error.code === 'auth/popup-closed-by-user') {
-                    alert('Login cancelado.');
-                } else if (error.code === 'auth/operation-not-allowed') {
-                    alert('⚠️ Login com Google não está ativado no Firebase.\n\nVá em Authentication > Sign-in method > Google e ative.');
-                } else {
-                    alert('Erro ao fazer login com Google: ' + error.message);
-                }
-            }
-        };
-        
-        window.clientLoginWithEmail = async () => {
-            const email = document.getElementById('clientEmailInput').value.trim();
-            const password = document.getElementById('clientPasswordInput').value;
-            
-            if (!email || !password) {
-                alert('Preencha email e senha');
-                return;
-            }
-            
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-                // onAuthStateChanged vai lidar com a navegação
-            } catch (error) {
-                console.error('Erro no login:', error);
-                if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                    alert('Email ou senha incorretos.');
-                } else if (error.code === 'auth/invalid-email') {
-                    alert('Email inválido.');
-                } else {
-                    alert('Erro ao fazer login: ' + error.message);
-                }
-            }
-        };
-        
-        window.clientRegisterWithEmail = async () => {
-            const email = document.getElementById('clientEmailInput').value.trim();
-            const password = document.getElementById('clientPasswordInput').value;
-            
-            if (!email || !password) {
-                alert('Preencha email e senha');
-                return;
-            }
-            
-            if (password.length < 6) {
-                alert('A senha deve ter pelo menos 6 caracteres.');
-                return;
-            }
-            
-            try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                // onAuthStateChanged vai lidar com a navegação
-            } catch (error) {
-                console.error('Erro no cadastro:', error);
-                if (error.code === 'auth/email-already-in-use') {
-                    alert('Este email já está cadastrado. Tente fazer login.');
-                } else if (error.code === 'auth/invalid-email') {
-                    alert('Email inválido.');
-                } else if (error.code === 'auth/weak-password') {
-                    alert('Senha muito fraca. Use pelo menos 6 caracteres.');
-                } else {
-                    alert('Erro ao cadastrar: ' + error.message);
-                }
-            }
-        };
-        
         // --- ADMIN & BARBER LOGIN (Area Restrita) ---
         window.openLoginModal = () => {
             document.getElementById('loginModal').classList.remove('hidden');
