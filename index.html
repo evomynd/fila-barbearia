@@ -394,7 +394,43 @@
         <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-md text-center">
             <i class="fa-solid fa-lock text-amber-500 text-3xl mb-4"></i>
             <h3 class="text-xl font-bold text-white mb-2">Acesso Restrito</h3>
-            <p class="text-slate-400 text-sm mb-6">Digite seu PIN para acessar</p>
+            <p class="text-slate-400 text-sm mb-6">Barbeiros e Administradores</p>
+            
+            <!-- Aviso de Autenticação -->
+            <div id="barberAuthWarning" class="bg-amber-900/30 border border-amber-600 rounded-lg p-3 mb-4 text-xs text-amber-200 hidden">
+                <i class="fa-solid fa-exclamation-triangle mr-1"></i>
+                <strong>Atenção:</strong> Você precisa estar autenticado no Firebase. Faça login com email/Google primeiro.
+            </div>
+            
+            <!-- Login com Google -->
+            <button onclick="loginWithGoogle()" class="w-full bg-white hover:bg-gray-100 text-gray-800 font-bold py-3 rounded-lg mb-3 flex items-center justify-center gap-3 transition">
+                <i class="fa-brands fa-google text-xl"></i>
+                Continuar com Google
+            </button>
+            
+            <!-- Divisor -->
+            <div class="flex items-center gap-3 my-4">
+                <div class="flex-1 h-px bg-slate-600"></div>
+                <span class="text-slate-500 text-xs">OU</span>
+                <div class="flex-1 h-px bg-slate-600"></div>
+            </div>
+            
+            <!-- Login com Email -->
+            <div id="emailLoginForm" class="mb-4 space-y-3">
+                <input type="email" id="emailInput" placeholder="Seu email" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-500 focus:outline-none">
+                <input type="password" id="passwordInput" placeholder="Sua senha" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-amber-500 focus:outline-none">
+                <div class="flex gap-2">
+                    <button onclick="loginWithEmail()" class="flex-1 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500">Entrar</button>
+                    <button onclick="registerWithEmail()" class="flex-1 py-3 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-500">Cadastrar</button>
+                </div>
+            </div>
+            
+            <!-- Divisor -->
+            <div class="flex items-center gap-3 my-4">
+                <div class="flex-1 h-px bg-slate-600"></div>
+                <span class="text-slate-500 text-xs">BARBEIROS</span>
+                <div class="flex-1 h-px bg-slate-600"></div>
+            </div>
             
             <!-- Login com PIN (para barbeiros) -->
             <p class="text-slate-400 text-xs mb-2">Acesso de Barbeiro/Admin (PIN)</p>
@@ -642,7 +678,31 @@
             }, (error) => {
                 console.error("Barber Listener Error:", error);
                 if (error.code === 'permission-denied') {
-                    alert("⚠️ CONFIGURAÇÃO DO FIREBASE NECESSÁRIA:\n\nPermissão Negada no Banco de Dados (Firestore).\n\nCOMO RESOLVER:\n1. Vá no Firebase Console > Firestore Database > Rules\n2. Altere as regras para:\n\nallow read, write: if request.auth != null;");
+                    alert("⚠️ CONFIGURAÇÃO DO FIREBASE NECESSÁRIA:\n\n" +
+                          "ERRO: Permissão Negada no Firestore\n\n" +
+                          "═══════════════════════════════════════\n" +
+                          "SOLUÇÃO RÁPIDA (APENAS PARA DESENVOLVIMENTO):\n" +
+                          "═══════════════════════════════════════\n\n" +
+                          "1. Vá para: https://console.firebase.google.com\n" +
+                          "2. Selecione seu projeto\n" +
+                          "3. Menu lateral > Firestore Database\n" +
+                          "4. Aba 'Rules' (Regras)\n" +
+                          "5. Substitua o conteúdo por:\n\n" +
+                          "rules_version = '2';\n" +
+                          "service cloud.firestore {\n" +
+                          "  match /databases/{database}/documents {\n" +
+                          "    match /{document=**} {\n" +
+                          "      allow read, write: if request.auth != null;\n" +
+                          "    }\n" +
+                          "  }\n" +
+                          "}\n\n" +
+                          "6. Clique em 'Publicar'\n\n" +
+                          "⚠️ IMPORTANTE: Esta regra permite qualquer usuário\n" +
+                          "autenticado ler/escrever tudo. Para produção,\n" +
+                          "implemente regras mais específicas!\n\n" +
+                          "═══════════════════════════════════════\n" +
+                          "PROBLEMA: Barbeiros precisam estar autenticados\n" +
+                          "no Firebase para modificar a fila!");
                 }
             });
 
@@ -832,8 +892,12 @@
             const provider = new GoogleAuthProvider();
             try {
                 await signInWithPopup(auth, provider);
-                closeLoginModal();
-                alert('Login realizado com sucesso!');
+                // Ocultar aviso de autenticação
+                document.getElementById('barberAuthWarning').classList.add('hidden');
+                // NÃO fechar o modal - barbeiro precisa inserir PIN
+                alert('✅ Login realizado com sucesso!\n\nAgora digite o PIN do barbeiro abaixo.');
+                // Focar no campo de PIN
+                document.getElementById('pinInput').focus();
             } catch (error) {
                 console.error('Erro no login com Google:', error);
                 if (error.code === 'auth/popup-closed-by-user') {
@@ -858,11 +922,15 @@
             
             try {
                 await signInWithEmailAndPassword(auth, email, password);
-                closeLoginModal();
-                alert('Login realizado com sucesso!');
+                // Ocultar aviso de autenticação
+                document.getElementById('barberAuthWarning').classList.add('hidden');
+                // NÃO fechar o modal - barbeiro precisa inserir PIN
+                alert('✅ Login realizado com sucesso!\n\nAgora digite o PIN do barbeiro abaixo.');
+                // Focar no campo de PIN
+                document.getElementById('pinInput').focus();
             } catch (error) {
                 console.error('Erro no login com email:', error);
-                if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+                if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
                     alert('Email ou senha incorretos.');
                 } else if (error.code === 'auth/invalid-email') {
                     alert('Email inválido.');
@@ -891,8 +959,12 @@
             
             try {
                 await createUserWithEmailAndPassword(auth, email, password);
-                closeLoginModal();
-                alert('Cadastro realizado com sucesso!');
+                // Ocultar aviso de autenticação
+                document.getElementById('barberAuthWarning').classList.add('hidden');
+                // NÃO fechar o modal - barbeiro precisa inserir PIN
+                alert('✅ Cadastro realizado com sucesso!\n\nAgora digite o PIN do barbeiro abaixo.');
+                // Focar no campo de PIN
+                document.getElementById('pinInput').focus();
             } catch (error) {
                 console.error('Erro no cadastro:', error);
                 if (error.code === 'auth/email-already-in-use') {
@@ -911,6 +983,17 @@
 
         window.processLogin = () => {
             const pin = document.getElementById('pinInput').value;
+            
+            // VERIFICAR SE USUÁRIO ESTÁ AUTENTICADO NO FIREBASE
+            if (!currentUser) {
+                document.getElementById('barberAuthWarning').classList.remove('hidden');
+                alert("⚠️ AUTENTICAÇÃO NECESSÁRIA\n\n" +
+                      "Para acessar o painel de barbeiro/admin, você precisa:\n\n" +
+                      "1. Fazer login com Google OU\n" +
+                      "2. Fazer login com Email/Senha\n\n" +
+                      "Depois de autenticado, digite o PIN do barbeiro.");
+                return;
+            }
             
             if (pin === MASTER_PIN) {
                 loggedInMode = 'admin';
