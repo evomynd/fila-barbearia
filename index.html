@@ -519,6 +519,10 @@
         let loggedInBarberId = null; 
         let myTicket = null; // Stores { id, barberId, name } if user is in queue
         let pendingBarberSwitch = null; // Stores target barber ID during confirmation
+        
+        // Listener unsubscribe functions
+        let unsubscribeBarbersListener = null;
+        let unsubscribeQueueListener = null;
 
         // --- CLIENT LOGIN FUNCTIONS (Must be global for onclick handlers) ---
         window.clientLoginWithGoogle = async () => {
@@ -681,9 +685,23 @@
         }
 
         // --- DATA LISTENERS ---
+        function stopListeners() {
+            if (unsubscribeBarbersListener) {
+                unsubscribeBarbersListener();
+                unsubscribeBarbersListener = null;
+            }
+            if (unsubscribeQueueListener) {
+                unsubscribeQueueListener();
+                unsubscribeQueueListener = null;
+            }
+        }
+        
         function startListeners() {
+            // Parar listeners anteriores se existirem
+            stopListeners();
+            
             // Listen to Barbers
-            onSnapshot(getCollection(BARBERS_COL), (snapshot) => {
+            unsubscribeBarbersListener = onSnapshot(getCollection(BARBERS_COL), (snapshot) => {
                 const temp = [];
                 snapshot.forEach(doc => temp.push({ id: doc.id, ...doc.data() }));
                 barbersData = temp;
@@ -739,7 +757,7 @@
             });
 
             // Listen to Queue
-            onSnapshot(getCollection(QUEUE_COL), (snapshot) => {
+            unsubscribeQueueListener = onSnapshot(getCollection(QUEUE_COL), (snapshot) => {
                 const temp = [];
                 snapshot.forEach(doc => temp.push({ id: doc.id, ...doc.data() }));
                 
@@ -1162,14 +1180,24 @@
                 goHome();
             } else {
                 // Logout completo do Firebase (cliente)
-                    try {
-                        await signOut(auth);
-                        myTicket = null;
-                        // onAuthStateChanged vai automaticamente mostrar a tela de login
-                    } catch (e) {
-                        console.error('Erro ao sair:', e);
-                        alert('Erro ao sair da conta. Tente novamente.');
-                    }
+                try {
+                    // Parar listeners ANTES de fazer signOut para evitar erros de permissão
+                    stopListeners();
+                    
+                    // Limpar dados locais
+                    myTicket = null;
+                    queueData = [];
+                    barbersData = [];
+                    selectedBarber = null;
+                    
+                    // Fazer signOut
+                    await signOut(auth);
+                    
+                    // onAuthStateChanged vai automaticamente mostrar a tela de login
+                } catch (e) {
+                    console.error('Erro ao sair:', e);
+                    alert('Erro ao sair da conta. Tente novamente.');
+                }
             }
         };
 
