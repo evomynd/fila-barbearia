@@ -69,6 +69,11 @@
         <div class="flex gap-2 items-center">
             <span id="headerContext" class="text-xs font-bold text-slate-400 uppercase tracking-widest hidden md:block"></span>
             
+            <!-- Botão Instalar App -->
+            <button onclick="installPWA()" id="installBtn" class="hidden bg-green-600 hover:bg-green-500 text-xs px-3 py-2 rounded-lg transition border border-green-400">
+                <i class="fa-solid fa-download mr-1"></i> <span class="hidden md:inline">Instalar App</span>
+            </button>
+            
             <button onclick="openLoginModal()" id="adminBtn" class="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-2 rounded-lg transition border border-slate-600">
                 <i class="fa-solid fa-lock mr-1"></i> Área Restrita
             </button>
@@ -1851,6 +1856,10 @@
     
     <!-- PWA Service Worker Registration -->
     <script>
+        // Variável para armazenar o evento de instalação
+        let deferredPrompt = null;
+        
+        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('service-worker.js')
@@ -1863,17 +1872,61 @@
             });
         }
         
-        // PWA Install Prompt
-        let deferredPrompt;
+        // Capturar evento beforeinstallprompt e mostrar botão
         window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevenir o minibar padrão do navegador
             e.preventDefault();
+            
+            // Armazenar o evento
             deferredPrompt = e;
-            console.log('🔔 App pode ser instalado!');
-            // Você pode mostrar um botão customizado de instalação aqui
+            
+            // Mostrar botão de instalação
+            const installBtn = document.getElementById('installBtn');
+            if (installBtn) {
+                installBtn.classList.remove('hidden');
+                console.log('🔔 Botão de instalação ativado!');
+            }
         });
         
+        // Função para instalar o app
+        window.installPWA = async () => {
+            if (deferredPrompt) {
+                // Mostrar prompt de instalação
+                deferredPrompt.prompt();
+                
+                // Aguardar resposta do usuário
+                const { outcome } = await deferredPrompt.userChoice;
+                
+                if (outcome === 'accepted') {
+                    console.log('✅ Usuário aceitou instalar o app!');
+                    // Esconder botão após instalação
+                    const installBtn = document.getElementById('installBtn');
+                    if (installBtn) {
+                        installBtn.classList.add('hidden');
+                    }
+                } else {
+                    console.log('❌ Usuário recusou instalar o app');
+                }
+                
+                // Limpar o evento
+                deferredPrompt = null;
+            } else {
+                // Se o evento não estiver disponível, informar ao usuário
+                alert('Para instalar este app:\\n\\n' +
+                      '1. Abra o menu do seu navegador\\n' +
+                      '2. Procure por "Adicionar à tela inicial" ou "Instalar app"\\n' +
+                      '3. Confirme a instalação');
+            }
+        };
+        
+        // Ouvir quando o app foi instalado
         window.addEventListener('appinstalled', () => {
             console.log('✅ PWA instalado com sucesso!');
+            // Esconder botão de instalação
+            const installBtn = document.getElementById('installBtn');
+            if (installBtn) {
+                installBtn.classList.add('hidden');
+            }
             deferredPrompt = null;
         });
     </script>
