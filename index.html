@@ -14,12 +14,11 @@
     <meta name="mobile-web-app-capable" content="yes">
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="/fila-barbearia/manifest.json">
     
     <!-- PWA Icons -->
-    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="/fila-barbearia/icon-192.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/fila-barbearia/icon-180.png">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -1916,7 +1915,7 @@
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('service-worker.js')
+                navigator.serviceWorker.register('/fila-barbearia/service-worker.js')
                     .then(registration => {
                         console.log('✅ Service Worker registrado com sucesso:', registration.scope);
                         
@@ -2045,7 +2044,7 @@
                 console.warn('  - App já está instalado');
                 
                 // Verificar se o manifest pode ser acessado
-                fetch('manifest.json')
+                fetch('/fila-barbearia/manifest.json')
                     .then(r => {
                         if (r.ok) {
                             console.log('✅ manifest.json está acessível');
