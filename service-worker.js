@@ -1,4 +1,4 @@
-﻿// Service Worker para BarberQueue PWA
+// Service Worker para BarberQueue PWA
 const CACHE_NAME = 'barberqueue-v1.0.0';
 const urlsToCache = [
   './APPBARBER.html',
